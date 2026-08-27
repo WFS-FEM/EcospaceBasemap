@@ -156,6 +156,8 @@ fn.read_mrip_dtrips <- function(file, fl.fips = 12) {
 
 
 #' Florida county polygons as sf, with an uppercase County column.
+#'
+#' @return sf of Florida counties in EPSG:4326, with County uppercased.
 fn.florida_counties <- function() {
   flc <- sf::st_as_sf(maps::map("county", "florida", plot = FALSE, fill = TRUE))
   # maps returns unprojected lon/lat but st_as_sf stamps its own CRS, which does
@@ -404,6 +406,13 @@ fn.default_port_fleets <- function() {
 
 
 #' Anchor table for a fleet: POP_CENTER, with headboat marinas swapped in.
+#'
+#' Headboats are tied to a known dock rather than to a county population centre,
+#' so that fleet anchors on HEADBOAT_HUB where an entry exists and falls back to
+#' POP_CENTER elsewhere.
+#'
+#' @param which "default" for POP_CENTER as-is, "headboat" to swap in marinas.
+#' @return data.frame with County, Town, lon, lat.
 fn.fleet_pop_center <- function(which = c("default", "headboat")) {
   which <- match.arg(which)
   pc <- POP_CENTER

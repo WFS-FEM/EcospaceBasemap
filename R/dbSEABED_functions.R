@@ -1,3 +1,7 @@
+# terra is attached here rather than namespace-qualified throughout: this
+# file is a legacy carry-over with bare plot()/nlyr() calls in two places.
+# Attaching terra is safe -- the hazard the other modules guard against is
+# attaching raster or sp, which would mask terra's generics.
 library('terra')
 
 
@@ -130,7 +134,7 @@ fn.make_dbseabed_ascii <- function(dir.dbseabed, dir.ascii, depth, resample.meth
   
   dirs.dbseabed = list.dirs(dir.dbseabed, recursive=F)
   
-  res <- res(depth)[1]*60
+  res <- terra::res(depth)[1]*60
   
   
   # Ensure 'depth' is a SpatRaster (terra) not a RasterLayer (raster)  <-- added
@@ -199,6 +203,30 @@ fn.make_dbseabed_ascii <- function(dir.dbseabed, dir.ascii, depth, resample.meth
 } #eof
 
 
+#' Resample the dbSEABED substrate layers onto the Ecospace grid.
+#'
+#' Each subdirectory of `dir.dbseabed` holds one raw ASCII grid of percent
+#' composition (gravel, mud, rock, sand). For each: harmonize the CRS to the
+#' depth template, crop, drop the -99 NoData flag, convert percent to
+#' proportion, aggregate to roughly the target resolution, then resample onto
+#' the depth grid exactly.
+#'
+#' Aggregating before resampling matters: the source grids are much finer than
+#' the model grid, and resampling straight from them would sample single source
+#' cells rather than averaging over the footprint of a model cell.
+#'
+#' Note the four fractions are NOT renormalized to sum to 1 here. They are
+#' returned as read, and `fn.combine_habitats_sum1()` handles the normalization
+#' as part of building the sum-to-1 basemap.
+#'
+#' @param dir.dbseabed Directory containing one subdirectory per layer, as
+#'   created by fn.pull_dbseabed().
+#' @param depth SpatRaster template (the model grid).
+#' @param resample.method Passed to terra::resample(); "near" avoids the extra
+#'   smoothing that bilinear would add on top of the aggregation.
+#' @param dir.out Optional output directory for the per-layer ASCII grids.
+#' @return Multi-layer SpatRaster of substrate proportions, one layer per
+#'   dbSEABED subdirectory, masked to the depth grid.
 fn.rasterize_dbseabed <- function(dir.dbseabed, depth, resample.method='near', dir.out){
   
   # dir.dbseabed = "C:\\Users\\dchagaris\\Github\\WFS-FEM\\EnvironmentalDrivers2EwE\\data\\dbSEABED"
@@ -246,14 +274,14 @@ fn.rasterize_dbseabed <- function(dir.dbseabed, depth, resample.method='near', d
     seabed.stack <- c(seabed.stack, out.i)
     
     par(mfrow=c(2,2),oma=c(0,0,1,0))
-    plot(rast.i, main='full raster')
-    plot(crop.i, main='WFS cropped')
-    plot(agg.i, main='Aggregated to approximate depth res')
-    plot(out.i, main='Resampled to depth grid')
+    terra::plot(rast.i, main='full raster')
+    terra::plot(crop.i, main='WFS cropped')
+    terra::plot(agg.i, main='Aggregated to approximate depth res')
+    terra::plot(out.i, main='Resampled to depth grid')
     title(main=paste("dbSEABED:",strsplit(basename(file.asc.i),"_")[[1]][2]), outer=T)
   }
   dev.off()
-  writeRaster(seabed.stack,filename=paste0(dir.out,"/",names(seabed.stack),"_",res,"min.asc"))
+  terra::writeRaster(seabed.stack,filename=paste0(dir.out,"/",names(seabed.stack),"_",res,"min.asc"))
 return(seabed.stack)
 } #eof
 

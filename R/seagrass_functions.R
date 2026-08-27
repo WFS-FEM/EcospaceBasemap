@@ -1,5 +1,14 @@
 
 
+#' Download the Gulf Data Atlas seagrass layer.
+#'
+#' Fetches GulfwideSAV.zip from NOAA NCEI and unpacks it into a subdirectory
+#' named after the archive. The FWC Seagrass_Statewide layer is not downloadable
+#' this way and has to be supplied by hand.
+#'
+#' @param dir.out Directory to download into; a GulfwideSAV/ subdirectory is
+#'   created inside it.
+#' @return NULL, invisibly. Called for the download.
 fn.pull_seagrass <- function(dir.out){
   
   #dir.out = "C:\\Users\\dchagaris\\Github\\WFS-FEM\\EnvironmentalDrivers2EwE\\data\\seagrass"
@@ -210,6 +219,21 @@ fn.combine_seagrass_rasters <- function(x, method = c("max", "sum_capped"),
 }
 
 
+#' Rasterize ONE seagrass polygon source onto the Ecospace grid.
+#'
+#' `cover = TRUE` returns the fraction of each cell covered by polygons, so the
+#' output is a proportion in [0, 1]. Cells with no polygon become 0 and land
+#' becomes NA.
+#'
+#' Use this per source to inspect the layers individually. To get a single map
+#' for the sum-to-1 step, combine the sources with fn.combine_seagrass() or
+#' fn.combine_seagrass_rasters() -- the two available sources map the same beds,
+#' so adding their rasters double-counts.
+#'
+#' @param dir.seagrass Directory holding one .shp.
+#' @param dir.ascii Output directory for the ASCII grid and PNG.
+#' @param depth SpatRaster template (the model grid).
+#' @return Single-layer SpatRaster of proportional cover.
 fn.make_seagrass_ascii <- function(dir.seagrass, dir.ascii, depth){
   
   #dir.seagrass= "C:\\Users\\dchagaris\\Github\\WFS-FEM\\EnvironmentalDrivers2EwE\\data\\seagrass\\Seagrass_Statewide" 
