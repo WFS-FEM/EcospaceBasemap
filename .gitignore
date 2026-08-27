@@ -1,0 +1,17 @@
+# R session cruft
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+Rplots.pdf
+
+# Generated basemaps live on a local drive outside the repo (cfg$out_root in
+# make_WFS_basemaps.R). Nothing generated should be committed here.
+output/
+*.asc
+*.prj
+*.aux.xml
+*.log
+
+# Large or downloaded source data
+data/
