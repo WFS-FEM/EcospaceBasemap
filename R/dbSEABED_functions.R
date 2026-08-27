@@ -286,3 +286,49 @@ return(seabed.stack)
 } #eof
 
 
+
+
+#' Plot the dbSEABED substrate fractions as a panel.
+#'
+#' Substrate is a genuine proportion in [0, 1] and reasonably even across the
+#' shelf, so a plain linear ramp works here -- unlike the habitat layers, which
+#' are zero-inflated and need a biased scale.
+#'
+#' @param x Multi-layer SpatRaster from fn.rasterize_dbseabed(), or a directory
+#'   of written ASCII grids.
+#' @param dir.maps Output directory for the PNG.
+#' @param tag Optional filename suffix.
+#' @param col Colour ramp passed to terra::plot().
+#' @return The path written, invisibly.
+fn.plot_dbseabed <- function(x, dir.maps, tag = "",
+                             col = colorRamps::matlab.like(100)) {
+
+  if (is.character(x)) {
+    f <- list.files(x, pattern = "[.]asc$", full.names = TRUE)
+    x <- terra::rast(f)
+    names(x) <- tools::file_path_sans_ext(basename(f))
+  }
+  if (!dir.exists(dir.maps)) dir.create(dir.maps, recursive = TRUE)
+
+  res.min <- round(terra::res(x)[1] * 60, 0)
+  n  <- terra::nlyr(x)
+  nc <- ceiling(sqrt(n)); nr <- ceiling(n / nc)
+
+  fout <- file.path(dir.maps, sprintf("dbSEABED substrate %dmin%s.png", res.min,
+                                      if (nzchar(tag)) paste0(" ", tag) else ""))
+  png(fout, height = 3.6 * nr, width = 4.2 * nc, units = "in", res = 300)
+  on.exit(dev.off(), add = TRUE)
+  par(mfrow = c(nr, nc))
+
+  for (i in seq_len(n)) {
+    v <- terra::values(x[[i]], mat = FALSE)
+    terra::plot(x[[i]], col = col, colNA = "lightgray",
+                mar = c(2, 2, 3.5, 5), plg = list(cex = 0.7),
+                main = sprintf("%s\nmean %.3f   max %.3f", names(x)[i],
+                               mean(v, na.rm = TRUE), max(v, na.rm = TRUE)))
+    maps::map("state", add = TRUE, fill = TRUE, col = "lightgray")
+  }
+
+  message("Figure written to\n  ", fout)
+  invisible(fout)
+}

@@ -168,6 +168,10 @@ single template that defines the model domain, including what counts as land.
 
 **Writes** `depth_5min.asc`, `excl_5min.asc`, `depth_5min.png`.
 
+![Depth and exclusion](docs/img/01-depth.png)
+
+*Depth in metres, land in black. The colour ramp is biased toward shallow water, where the shelf detail is.*
+
 ---
 
 ### 2.1 Seagrass
@@ -203,6 +207,10 @@ but cell size governs how much distinct bed area gets mixed into one cell.
 
 **Writes** one grid per source plus `seagrass_coverage_combined_5min.asc`.
 
+![Seagrass](docs/img/02-1-seagrass.png)
+
+*Combined seagrass cover. Beds are confined to the nearshore — Big Bend, Tampa Bay, Charlotte Harbor and the Ten Thousand Islands.*
+
 ---
 
 ### 2.2 dbSEABED substrate
@@ -220,6 +228,10 @@ The four fractions are **not** renormalized here — section 2.5 does that as pa
 of building the sum-to-1 basemap.
 
 **Writes** four `gmf_*_val_5min.asc` grids.
+
+![dbSEABED substrate](docs/img/02-2-dbseabed.png)
+
+*Substrate fractions. Grey is missing data, not zero — dbSEABED is interpolated from sparse grabs and has real gaps, which section 2.5 fills with a 3×3 focal mean. Note the rock ridge tracking the shelf break.*
 
 ---
 
@@ -264,6 +276,10 @@ Two arguments worth knowing:
 
 **Writes** six `GFISHER_*_prop_5min.asc`, the microgrid footprint, and plots.
 
+![GFISHER reef habitat](docs/img/02-3-gfisher.png)
+
+*Reef proportion by class. The grey outline is the side-scan footprint, so a white cell inside it was surveyed and had no reef, while a white cell outside it was never looked at. Artificial classes are sparse and concentrated in the Panhandle, where Florida's largest artificial reef programmes are.*
+
 ---
 
 ### 2.4 Artificial reefs
@@ -289,6 +305,10 @@ fuzzy, 0 unmatched.
 > relief-weighted index. Set `weight.by.relief = FALSE` for the genuine fraction.
 
 **Writes** `AR_prop_area_{all,Low,Medium,High}_5min.asc` and a 2×2 panel.
+
+![Artificial reefs](docs/img/02-4-artificial-reefs.png)
+
+*Relief-weighted artificial reef index. Total AR footprint across the whole shelf is about 2.3 km² in a 185,548 km² domain, so values are small everywhere.*
 
 ---
 
@@ -337,6 +357,10 @@ half was being weighted twice.
 **Writes** ten `habitat_*_5min.asc`, `RCK_raw_5min.asc`, a QC table, the
 per-stratum relief shares, and a panel figure.
 
+![Habitat basemap](docs/img/02-5-habitat-sum1.png)
+
+*The ten Ecospace habitat layers plus their sum. The Sum panel is uniform by construction — every water cell closes to exactly 1.000.*
+
 ---
 
 ### 3. Management areas
@@ -356,6 +380,10 @@ seasonal management while the Edges differ, so it splits into two grids. Add or
 change rules in `fn.default_ma_splits()`.
 
 **Writes** nine grids plus a panel.
+
+![Management areas](docs/img/03-management-areas.png)
+
+*Pulley Ridge is empty because the HAPC sits south of the grid's 25°N edge; the legacy scripts produced the same empty grid.*
 
 ---
 
@@ -398,6 +426,14 @@ Edit `fn.default_port_fleets()` to change filters or thresholds, and
 **Writes** 11 grids, 11 assignment tables, a combined assignment CSV, 11
 validation maps and a panel.
 
+![Port layers](docs/img/04-ports.png)
+
+*Port cells by fleet. Each fleet gets its own set of counties, so the layers differ in both count and location.*
+
+![Port assignment](docs/img/04-ports-validation.png)
+
+*How a port is chosen, for the commercial reef fleet. Grey squares are all coastal land candidates; red circles are the county anchor points; yellow squares are the cells actually assigned, joined to their anchor by a red line.*
+
 ---
 
 ### 5. Survey regions
@@ -433,6 +469,10 @@ changes which cells fall on region edges.
 
 **Writes** the nine per-region grids, the combined age-0 grid, the GFISHER grid,
 `combined_regions_5min.asc`, an attribute table with geodesic areas, and a map.
+
+![Survey regions](docs/img/05-regions.png)
+
+*Combined survey regions. Codes 1–9 are the age-0 bay and estuary regions, 10–16 the GFISHER survey hulls and their overlaps; age-0 wins where they meet.*
 
 ---
 

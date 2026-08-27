@@ -212,6 +212,16 @@ fn.combine_seagrass_rasters <- function(x, method = c("max", "sum_capped"),
     terra::writeRaster(sav, f, overwrite = TRUE, NAflag = -9999,
                        gdal = c("DECIMAL_PRECISION=4"))
     unlink(paste0(f, ".aux.xml"))
+
+    png(gsub("\\.asc$", ".png", f), height = 7, width = 7, units = "in", res = 300)
+    terra::plot(sav, colNA = "lightgray", mar = c(3, 3, 3, 6),
+                col = colorRampPalette(colorRamps::matlab.like2(100),
+                                       bias = 2, interpolate = "spline")(100),
+                main = sprintf("Seagrass proportion coverage\ncombined (%s) of %d sources",
+                               method, terra::nlyr(x)))
+    maps::map("state", add = TRUE, fill = TRUE, col = "lightgray")
+    dev.off()
+
     message("Combined seagrass written to\n  ", f)
   }
 

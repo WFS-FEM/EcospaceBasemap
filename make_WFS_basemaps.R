@@ -115,6 +115,10 @@ fn.pull_dbseabed(dir.out = dir.dbseabed)
 seabed <- fn.rasterize_dbseabed(dir.dbseabed = file.path(dir.data,'dbseabed'), dir.out=file.path(dir.habitats,'dbseabed'),
                                 depth, resample.method = 'near')
 
+###plots----
+#grey patches are NA gaps in dbSEABED; section 2.5 fills them with a focal mean
+fn.plot_dbseabed(seabed, dir.maps = file.path(dir.habitats,'dbseabed'))
+
 ##2.3 GFISHER----
 dir.create(file.path(dir.habitats,'gfisher'), recursive = TRUE)
 file.gfishergdb = list.files(dir.data,pattern=".gdb",full.names = T)

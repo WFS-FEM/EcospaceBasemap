@@ -12,6 +12,10 @@ output/
 *.prj
 *.aux.xml
 *.log
+*.png
+
+# ...except the README figures, which are checked in deliberately.
+!docs/img/*.png
 
 # Large or downloaded source data
 data/
