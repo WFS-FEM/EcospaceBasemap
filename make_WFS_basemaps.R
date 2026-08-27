@@ -181,8 +181,48 @@ basemap <- fn.combine_habitats_sum1(depth     = depth,
 fn.plot_habitat_basemap(basemap, dir.maps = dir.sum1)
 
 
-#3. MPAs------------
+#3. management areas------------
+#One grid per management area, aligned to the depth template:
+#  1      cells the area covers
+#  0      other cells inside the model domain
+#  -9999  land and excluded deep water
+#touches=TRUE so small or thin areas are not lost at coarse resolution.
+#madswan_steamboat_edges holds three features in a LABEL field and is split into
+#two grids - Madison/Swanson + Steamboat Lumps share seasonal management, the
+#Edges differ. See fn.default_ma_splits() to add or change split rules.
+dir.ma <- file.path(dir.basemaps,'management_areas')
+dir.create(dir.ma, recursive=T)
+
+ma <- fn.make_management_area_maps(depth    = depth,
+                                   dir.zips = file.path(dir.data,'management_areas'),
+                                   dir.maps = dir.ma)
+
+###plots----
+fn.plot_management_areas(ma, dir.maps = dir.ma)
+
+
 #4. ports-----------
+#One binary grid per fleet: 1 = port, 0 = water, -9999 = all other land.
+#A port is a COASTAL LAND cell of the depth grid (land = NoData in depth,
+#touching >=1 water cell), inside the county, nearest that county's anchor
+#point. Ports go to the smallest set of counties reaching the fleet's
+#cum.thresh share of landings / trips / vessels.
+#Gulf vs Atlantic is set by the explicit GULF_COUNTIES list, not by distance -
+#the grid's east edge clips Atlantic water near Jacksonville and Cape Canaveral.
+#11 fleets; edit fn.default_port_fleets() to change filters or thresholds, and
+#POP_CENTER / HEADBOAT_HUB in R/port_functions.R to move a port.
+dir.ports <- file.path(dir.basemaps,'ports')
+dir.create(dir.ports, recursive=T)
+
+ports <- fn.make_port_maps(depth    = depth,
+                           dir.data = file.path(dir.data,'ports'),
+                           dir.maps = dir.ports)
+
+###plots----
+#one validation map per fleet, plus a panel of all 11 port layers
+fn.plot_port_maps(ports, depth = depth, dir.maps = dir.ports)
+
+
 #5. regions---------
 
 
