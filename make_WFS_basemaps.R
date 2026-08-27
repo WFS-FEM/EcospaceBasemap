@@ -224,5 +224,46 @@ fn.plot_port_maps(ports, depth = depth, dir.maps = dir.ports)
 
 
 #5. regions---------
+#One categorical grid coding which survey region each model cell belongs to:
+#  -9999  land
+#      0  water, unsampled
+#   1-9   age-0 survey regions (bays and estuaries)
+#  10-16  GFISHER survey coverage: 10 FWRI, 11 PASC, 12 PC,
+#         13 F+P, 14 F+PC, 15 P+PC, 16 F+P+PC
+#Age-0 regions override GFISHER codes where they overlap.
+#
+#The digitizing step is NOT reproduced here. It extracted the age-0 polygons
+#from a georeferenced PNG, and R's PNG decoder renders the anti-aliased borders
+#about a pixel thinner than Python's, which can resolve only 8 of the 9 regions.
+#age0_survey_regions.shp from the Python pipeline is the authoritative input.
+dir.regions <- file.path(dir.basemaps,'regions')
+dir.create(dir.regions, recursive=T)
+dir.regdata <- file.path(dir.data,'regions')
+
+###age-0 regions----
+#regenerates the UN-edited grid; the combine step below uses the hand-edited one
+age0 <- fn.make_age0_region_grids(depth,
+                                  file.shp = file.path(dir.regdata,'age0_survey_regions.shp'),
+                                  dir.maps = dir.regions)
+
+###GFISHER survey coverage----
+#kernel density on the sample points, keep the densest 95%, concave hull.
+#O(n^2) KDE to match scipy's gaussian_kde - takes ~30 s at 5 min.
+gfisher.reg <- fn.make_gfisher_survey_regions(depth,
+                                              file.csv = file.path(dir.regdata,'env3LABS_93to24.csv'),
+                                              dir.maps = dir.regions)
+
+###combine----
+#age0_survey_regions_5min_mod.asc is HAND-EDITED and is an input, not a
+#derived product - pass the regenerated `age0` instead to skip those edits.
+regions <- fn.combine_regions(age0    = file.path(dir.regdata,'age0_survey_regions_5min_mod.asc'),
+                              gfisher = gfisher.reg,
+                              dir.maps = dir.regions)
+
+###attributes + plot----
+region.attr <- fn.region_attributes(regions, dir.maps = dir.regions)
+fn.plot_regions(regions, dir.maps = dir.regions)
+
+
 
 
