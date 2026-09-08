@@ -17,5 +17,27 @@ output/
 # ...except the README figures, which are checked in deliberately.
 !docs/img/*.png
 
-# Large or downloaded source data
-data/
+# Source data. The whole tree is excluded, then three small folders are added
+# back because they are either irreplaceable or awkward to re-source:
+#   regions/          age0_survey_regions_5min_mod.asc is HAND-EDITED and exists
+#                     nowhere else; the age-0 shapefile came from a Python
+#                     digitizing step that is not reproducible in R
+#   management_areas/ 8 small zips that are the definition of the areas
+#   ports/            a specific FWC ReportCreator query (1985-2025, all
+#                     species) that would have to be reconstructed exactly
+#
+# Still excluded, deliberately:
+#   seagrass/         Seagrass_Statewide.shp alone is 230 MB, over GitHub's
+#                     100 MB per-file hard limit
+#   *.gdb/            275 MB, and FWRI-supplied - check redistribution terms
+#   dbseabed/         downloads itself via fn.pull_dbseabed()
+#   artificial_reefs/ source is marked REDACTED; check terms before publishing
+data/*
+!data/management_areas/
+!data/ports/
+!data/regions/
+
+# The extension rules above still apply inside those folders, so undo them
+# where the region inputs need to survive.
+!data/regions/*.asc
+!data/regions/*.prj

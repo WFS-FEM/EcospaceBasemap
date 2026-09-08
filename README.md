@@ -128,19 +128,28 @@ It is never attached.
 
 ## Input data
 
-`data/` is **gitignored**. Some inputs download themselves; the rest must be
-supplied. Total is roughly 660 MB, dominated by the GFISHER geodatabase and the
-seagrass shapefiles.
+Most of `data/` is **gitignored** — roughly 628 MB, dominated by the GFISHER
+geodatabase and the seagrass shapefiles. `Seagrass_Statewide.shp` alone is
+230 MB, over GitHub's 100 MB per-file hard limit.
 
-| directory | contents | how to get it |
-|---|---|---|
-| `data/seagrass/` | `GulfwideSAV/`, `Seagrass_Statewide/` | Gulfwide downloads via `fn.pull_seagrass()`; the FWC statewide layer must be supplied |
-| `data/dbseabed/` | `Gmf_GVL/`, `Gmf_MUD/`, `Gmf_RCK/`, `Gmf_SND/` | downloads via `fn.pull_dbseabed()` |
-| `data/GFISHER_EAST_Universe_2026.gdb/` | FWRI East Gulf side-scan geodatabase | supplied by FWRI |
-| `data/artificial_reefs/` | `dataS2_artificial_reef_structures_REDACTED.csv`, `reeflocations.csv` | published AR structure database; FWC deployment table |
-| `data/management_areas/` | 8 zipped shapefiles | GulfCouncil / SERO |
-| `data/ports/` | `ReportCreatorResults-County.csv`, `MRIP WFS gag and red grouper dtrips by county.csv` | FWC Commercial Landings ReportCreator; NOAA MRIP |
-| `data/regions/` | `age0_survey_regions.shp` (+ sidecars), `age0_survey_regions_5min_mod.asc`, `env3LABS_93to24.csv` | Python digitizing pipeline; hand-edited grid; GFISHER samples |
+Three small folders **are tracked** (~12 MB), because they are either
+irreplaceable or awkward to re-source: `data/regions/`, `data/management_areas/`
+and `data/ports/`. Everything else has to be downloaded or supplied. The
+**tracked** column below says which is which.
+
+| directory | tracked | size | contents | how to get it |
+|---|---|---|---|---|
+| `data/regions/` | **yes** | 7 MB | `age0_survey_regions.shp` (+ sidecars), `age0_survey_regions_5min_mod.asc`, `env3LABS_93to24.csv` | in the repo |
+| `data/management_areas/` | **yes** | 1 MB | 8 zipped shapefiles | in the repo (orig. GulfCouncil / SERO) |
+| `data/ports/` | **yes** | 4 MB | `ReportCreatorResults-County.csv`, `MRIP WFS gag and red grouper dtrips by county.csv` | in the repo (orig. FWC ReportCreator; NOAA MRIP) |
+| `data/dbseabed/` | no | 9 MB | `Gmf_GVL/`, `Gmf_MUD/`, `Gmf_RCK/`, `Gmf_SND/` | downloads via `fn.pull_dbseabed()` |
+| `data/seagrass/` | no | 330 MB | `GulfwideSAV/`, `Seagrass_Statewide/` | Gulfwide downloads via `fn.pull_seagrass()`; the FWC statewide layer must be supplied |
+| `data/GFISHER_EAST_Universe_2026.gdb/` | no | 275 MB | FWRI East Gulf side-scan geodatabase | supplied by FWRI |
+| `data/artificial_reefs/` | no | 5 MB | `dataS2_artificial_reef_structures_REDACTED.csv`, `reeflocations.csv` | published AR structure database; FWC deployment table |
+
+The two untracked non-downloadable sets — the GFISHER geodatabase and the
+`REDACTED` artificial-reef database — are left out on redistribution grounds as
+well as size; check their terms before publishing them anywhere.
 
 > **`age0_survey_regions_5min_mod.asc` is hand-edited and is an INPUT.**
 > Section 5 regenerates the *un-edited* age-0 grid; the combine step reads the
