@@ -3,25 +3,84 @@
 #' Download the Gulf Data Atlas seagrass layer.
 #'
 #' Fetches GulfwideSAV.zip from NOAA NCEI and unpacks it into a subdirectory
-#' named after the archive. The FWC Seagrass_Statewide layer is not downloadable
-#' this way and has to be supplied by hand.
+#' named after the archive. This is one of the two seagrass sources; the FWC
+#' statewide layer comes from a different agency -- see fn.pull_seagrass_fwc().
 #'
 #' @param dir.out Directory to download into; a GulfwideSAV/ subdirectory is
 #'   created inside it.
 #' @return NULL, invisibly. Called for the download.
 fn.pull_seagrass <- function(dir.out){
-  
-  #dir.out = "C:\\Users\\dchagaris\\Github\\WFS-FEM\\EnvironmentalDrivers2EwE\\data\\seagrass"
-  
-  message('Downloading seagrass layer from Gulf Data Atlas\nhttps://www.ncei.noaa.gov/maps/gulf-data-atlas/atlas.htm') 
-  
+
+  message('Downloading seagrass layer from Gulf Data Atlas\nhttps://www.ncei.noaa.gov/maps/gulf-data-atlas/atlas.htm')
+
   url = "https://www.ncei.noaa.gov/waf/data-atlas-waf/biotic/documents/GulfwideSAV.zip"
   file.out = file.path(dir.out,basename(url))
+
+  # The archive is large enough that R's 60 s default aborts it on an ordinary
+  # connection, so the timeout is raised for the duration of the download.
+  op <- options(timeout = max(3600, getOption("timeout")))
+  on.exit(options(op), add = TRUE)
+
+  if (!dir.exists(dir.out)) dir.create(dir.out, recursive = TRUE)
   download.file(url, destfile = file.out, mode='wb')
   unzip(zipfile=file.out, exdir=file.path(dir.out, gsub(".zip","",basename(url))))
   unlink(file.out)
 
   message('Seagrass data downloaded and extracted to \n',dir.out)
+} #eof
+
+
+#' Download the FWC statewide seagrass layer.
+#'
+#' "Seagrass Habitat in Florida" from the FWC open data portal: a compilation of
+#' statewide seagrass polygons from many source agencies and scales, reclassified
+#' by FWRI into continuous and patchy seagrass. It is fetched from the ArcGIS Hub
+#' export endpoint for the published feature service.
+#'
+#' The extract directory is named Seagrass_Statewide because that name is not
+#' cosmetic: fn.make_seagrass_ascii() puts basename(dir.seagrass) into the output
+#' filenames and uses it to label the plot as the FWC source.
+#'
+#' Vintage caveat: the portal serves the current compilation, not the vintage the
+#' legacy scripts used. Seagrass extent maps are periodically revised, so a run
+#' today is not guaranteed to reproduce an older run cell for cell.
+#'
+#' @param dir.out Directory to download into; a Seagrass_Statewide/ subdirectory
+#'   is created inside it.
+#' @param url Export endpoint. Overridable in case FWC republishes the layer.
+#' @return NULL, invisibly. Called for the download.
+fn.pull_seagrass_fwc <- function(dir.out,
+                                 url = paste0("https://opendata.arcgis.com/api/v3/datasets/",
+                                              "3c899a92589a4f8dba2cdbba734697c5_15",
+                                              "/downloads/data?format=shp&spatialRefId=4326")) {
+
+  page <- "https://geodata.myfwc.com/datasets/myfwc::seagrass-habitat-in-florida"
+  message("Downloading statewide seagrass layer from FWC\n", page)
+
+  dir.shp  <- file.path(dir.out, "Seagrass_Statewide")
+  file.out <- file.path(dir.out, "Seagrass_Statewide.zip")
+
+  # Roughly 230 MB, so the 60 s default has to go up.
+  op <- options(timeout = max(3600, getOption("timeout")))
+  on.exit(options(op), add = TRUE)
+
+  if (!dir.exists(dir.out)) dir.create(dir.out, recursive = TRUE)
+
+  ok <- try(download.file(url, destfile = file.out, mode = "wb"), silent = TRUE)
+  if (inherits(ok, "try-error") || !file.exists(file.out))
+    stop("Could not download the FWC seagrass layer.\n",
+         "Download it by hand from ", page, "\n",
+         "and unzip it into ", dir.shp, call. = FALSE)
+
+  unzip(zipfile = file.out, exdir = dir.shp)
+  unlink(file.out)
+
+  if (length(list.files(dir.shp, pattern = "\\.shp$")) == 0)
+    stop("The download unpacked without a .shp in ", dir.shp,
+         ". Fetch the shapefile format by hand from ", page, call. = FALSE)
+
+  message("FWC seagrass data downloaded and extracted to \n", dir.shp)
+  invisible(NULL)
 } #eof
 
 #' Rasterize the union of two or more seagrass polygon sets.
@@ -201,7 +260,12 @@ fn.combine_seagrass_rasters <- function(x, method = c("max", "sum_capped"),
     message(sprintf("  %-24s n>0 %4d  mean %.5f  total %.2f",
                     paste0("combined (", method, ")"), sum(v > 0, na.rm = TRUE),
                     mean(v, na.rm = TRUE), sum(v, na.rm = TRUE)))
-    n.over <- sum(v > 1 + 1e-9, na.rm = TRUE)
+    # Tolerance sits above float32 epsilon (~1.2e-7) on purpose. cover = TRUE
+    # accumulates per-polygon fractions in single precision, so a fully covered
+    # cell lands a few 1e-8 above 1 -- 137 such cells in GulfwideSAV alone at
+    # 5 min. Real double-counting, which is what this check exists to catch, is
+    # percent-scale, not 1e-8.
+    n.over <- sum(v > 1 + 1e-6, na.rm = TRUE)
     if (n.over > 0) warning(n.over, " cell(s) exceed 1.")
   }
 
@@ -246,7 +310,7 @@ fn.combine_seagrass_rasters <- function(x, method = c("max", "sum_capped"),
 #' @return Single-layer SpatRaster of proportional cover.
 fn.make_seagrass_ascii <- function(dir.seagrass, dir.ascii, depth){
   
-  #dir.seagrass= "C:\\Users\\dchagaris\\Github\\WFS-FEM\\EnvironmentalDrivers2EwE\\data\\seagrass\\Seagrass_Statewide" 
+  #dir.seagrass = file.path(dir.data, "seagrass", "Seagrass_Statewide")
   #dir.ascii = file.path(dir.maps,"seagrass")
   #depth = depth.15min
   
