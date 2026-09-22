@@ -113,6 +113,35 @@ fn.data_manifest <- function() {
 }
 
 
+#' Reference item counts, for detecting that an input has changed underneath you.
+#'
+#' Measured on the copies that produced the verified 5 arc-min basemaps -- the run
+#' whose habitat figure came out identical to docs/img/02-5-habitat-sum1.png. Units
+#' follow fn.input_unit(): features for shapefiles, LINES for CSVs (not records --
+#' see fn.input_fingerprint()), files otherwise.
+#'
+#' These are a tripwire, not a specification. FWC revises the seagrass compilation
+#' and grows the artificial reef table, so a difference here is often legitimate;
+#' it just should never pass unnoticed. The geodatabase entry earns its place for a
+#' different reason: 79 files is how you learn that a 274 MB copy truncated.
+#'
+#' Update a value only alongside a run that shows the new data still produces a
+#' sensible basemap, and say so in the commit.
+#'
+#' @return Named integer vector, one element per manifest key. NA disables the
+#'   check for that input.
+fn.reference_counts <- function()
+  c(regions                     = 6L,       # shapefile + sidecars, .asc, .csv
+    management_areas            = 8L,       # one zip per area
+    ports                       = 2L,       # FWC ReportCreator + NOAA MRIP
+    dbseabed                    = 4L,       # Gmf_GVL/MUD/RCK/SND
+    seagrass_gulfwide           = 30335L,
+    seagrass_fwc                = 86173L,   # FWC compilation as of Sept 2026
+    artificial_reefs_fwc        = 4550L,    # 4,548 records; 2 hold embedded newlines
+    gfisher_gdb                 = 79L,
+    artificial_reefs_structures = 14428L)
+
+
 #' Test whether one manifest row is satisfied on disk.
 #'
 #' @param row One row of fn.data_manifest().
@@ -155,6 +184,98 @@ fn.input_found <- function(row, dir.data, file.gdb = NULL) {
 }
 
 
+#' Human-readable unit for an input's item count.
+#'
+#' Derived from `type` rather than stored per row, since it never varies within a
+#' type. "lines" is deliberate for CSVs: see fn.input_fingerprint().
+#'
+#' @param type A manifest `type` value.
+#' @return Single string.
+fn.input_unit <- function(type)
+  switch(type, dir.shp = "features", file = "lines", dir.asc = "grids", "files")
+
+
+#' Fingerprint one input as it currently sits on disk.
+#'
+#' Exists so a run can state what it is actually working from. The FWC endpoints
+#' behind fn.pull_seagrass_fwc() and fn.pull_reeflocations() serve the current
+#' compilation, not a pinned version, and fn.pull_all() skips inputs already
+#' present -- so which data you hold depends on when you first cloned. Without a
+#' fingerprint two people run identical code, see identical output, and can be
+#' working from different inputs with nothing to tell them apart.
+#'
+#' base R only, like the rest of this file, which shapes the three counts:
+#'
+#'   shapefile   feature count from the .shx index: 8 bytes per record after a
+#'               100-byte header, so (size - 100) / 8 is exact. Verified against
+#'               terra::vect() on all three shapefiles in this project.
+#'   CSV         LINE count, not record count. No cheap base-R method reproduces
+#'               read.csv()'s record count on files with embedded newlines --
+#'               count.fields() is off by one on both artificial reef tables --
+#'               and a number that is quietly wrong is worse than one that is
+#'               honestly labelled. reeflocations.csv is 4,550 lines for the
+#'               4,548 records FWC reports. A line count is still an exact,
+#'               reproducible function of the file, which is what drift
+#'               detection needs.
+#'   directory   file count.
+#'
+#' @param row One row of fn.data_manifest().
+#' @param dir.data Data root.
+#' @param file.gdb Explicit geodatabase path, or NULL to discover one.
+#' @return list(n, unit, bytes, md5). Any element may be NA when the input is
+#'   absent or the count cannot be taken; md5 covers the primary file only.
+fn.input_fingerprint <- function(row, dir.data, file.gdb = NULL) {
+
+  none <- list(n = NA_integer_, unit = fn.input_unit(row$type),
+               bytes = NA_real_, md5 = NA_character_)
+
+  found <- fn.input_found(row, dir.data, file.gdb)
+  if (!isTRUE(found$present)) return(none)
+
+  p <- if (nzchar(row$path)) file.path(dir.data, row$path) else dir.data
+
+  # bytes and file count over whatever the input actually is
+  tree <- if (row$type == "gdb") list.files(found$found, recursive = TRUE, full.names = TRUE)
+          else if (row$type == "file") found$found
+          else list.files(p, recursive = TRUE, full.names = TRUE)
+
+  bytes <- sum(file.size(tree), na.rm = TRUE)
+
+  n <- switch(row$type,
+
+    "dir.shp" = {
+      shx <- sub("\\.shp$", ".shx", found$found)
+      if (file.exists(shx)) as.integer((file.size(shx) - 100) / 8) else NA_integer_
+    },
+
+    "file" = {
+      con <- file(found$found, "r")
+      on.exit(close(con), add = TRUE)
+      k <- 0L
+      repeat {
+        chunk <- readLines(con, n = 50000L, warn = FALSE)
+        if (!length(chunk)) break
+        k <- k + length(chunk)
+      }
+      k
+    },
+
+    "dir.asc" = length(list.files(p, pattern = "\\.asc$", recursive = TRUE)),
+
+    length(tree)   # dir.any and gdb
+  )
+
+  # md5 of the primary file only - the .shp or the .csv - not the whole tree.
+  # It is the thing that would actually change, and hashing 274 MB to say so
+  # would not be worth the wait.
+  primary <- if (row$type %in% c("dir.shp", "file")) found$found else NA_character_
+  md5 <- if (!is.na(primary)) unname(tools::md5sum(primary)) else NA_character_
+
+  list(n = as.integer(n), unit = fn.input_unit(row$type),
+       bytes = as.numeric(bytes), md5 = md5)
+}
+
+
 #' Print the acquisition instructions for one input.
 #'
 #' This is what a new user sees when something is missing, so it says all four
@@ -189,10 +310,13 @@ fn.input_instructions <- function(row, dir.data) {
 #' @param dir.data Data root.
 #' @param file.gdb Explicit geodatabase path, or NULL to discover one.
 #' @param stop.on.missing Stop when a REQUIRED input is missing.
+#' @param fingerprint Count the items in each present input and compare against
+#'   fn.reference_counts(). Set FALSE to skip the I/O and only test existence.
 #' @param verbose Print the status table and the instructions.
-#' @return Named logical vector, one element per manifest key, invisibly.
+#' @return Named logical vector, one element per manifest key, invisibly. It
+#'   carries a "drift" attribute naming any input whose count has moved.
 fn.check_inputs <- function(dir.data, file.gdb = NULL, stop.on.missing = TRUE,
-                            verbose = TRUE) {
+                            fingerprint = TRUE, verbose = TRUE) {
 
   man <- fn.data_manifest()
   st  <- lapply(seq_len(nrow(man)), function(i)
@@ -201,17 +325,35 @@ fn.check_inputs <- function(dir.data, file.gdb = NULL, stop.on.missing = TRUE,
   man$present <- vapply(st, function(x) isTRUE(x$present), logical(1))
   man$found   <- vapply(st, function(x) as.character(x$found), character(1))
 
+  # What is actually on disk, against what produced the verified basemaps.
+  ref <- fn.reference_counts()
+  man$n.ref <- unname(ref[man$key])
+  man$n     <- NA_integer_
+  man$unit  <- vapply(man$type, fn.input_unit, character(1), USE.NAMES = FALSE)
+
+  if (isTRUE(fingerprint)) {
+    fp <- lapply(seq_len(nrow(man)), function(i)
+                 fn.input_fingerprint(man[i, ], dir.data, file.gdb))
+    man$n <- vapply(fp, function(x) as.integer(x$n), integer(1))
+  }
+
+  # DRIFT, not an error: FWC revises these layers, so a difference is often
+  # legitimate. It just should not pass unnoticed.
+  man$drift <- man$present & !is.na(man$n) & !is.na(man$n.ref) & man$n != man$n.ref
+
   if (verbose) {
     cat(sprintf("\nInput data check -- %s\n", dir.data))
     cat(strrep("-", 76), "\n", sep = "")
-    cat(sprintf("  %-28s %-5s %-9s %-7s %s\n",
-                "input", "sect", "need", "source", "status"))
+    cat(sprintf("  %-28s %-5s %-9s %-7s %-16s %s\n",
+                "input", "sect", "need", "source", "holding", "status"))
     for (i in seq_len(nrow(man)))
-      cat(sprintf("  %-28s %-5s %-9s %-7s %s\n",
+      cat(sprintf("  %-28s %-5s %-9s %-7s %-16s %s\n",
                   man$key[i], man$section[i],
                   if (man$required[i]) "required" else "optional",
                   man$how[i],
-                  if (man$present[i]) "OK" else "MISSING"))
+                  if (is.na(man$n[i])) "-"
+                    else sprintf("%s %s", format(man$n[i], big.mark = ","), man$unit[i]),
+                  if (!man$present[i]) "MISSING" else if (man$drift[i]) "DRIFT" else "OK"))
     cat(strrep("-", 76), "\n", sep = "")
   }
 
@@ -238,16 +380,63 @@ fn.check_inputs <- function(dir.data, file.gdb = NULL, stop.on.missing = TRUE,
     if (isTRUE(stop.on.missing)) stop(msg, call. = FALSE) else warning(msg, call. = FALSE)
   }
 
+  if (any(man$drift)) {
+    d <- man[man$drift, ]
+    warning("Input(s) differ from the reference the verified basemaps were built from:\n",
+            paste(sprintf("  %-28s %s %s, expected %s",
+                          d$key, format(d$n, big.mark = ","), d$unit,
+                          format(d$n.ref, big.mark = ",")),
+                  collapse = "\n"),
+            "\nThe FWC layers are revised periodically, so this may be legitimate - ",
+            "but your grids will not match a run built from the reference data. ",
+            "See README.md > Getting the data, and data/PROVENANCE.tsv for what was ",
+            "fetched when.", call. = FALSE)
+  }
+
   if (verbose) {
     opt <- man$key[!man$present & !man$required]
     if (length(opt) > 0)
       cat(sprintf("\nProceeding without optional input(s): %s.\nThe affected sections degrade rather than fail -- see README.md > Getting the data.\n",
                   paste(opt, collapse = ", ")))
-    else if (all(man$present))
-      cat("\nAll inputs present.\n")
+    else if (all(man$present) && !any(man$drift))
+      cat("\nAll inputs present, and matching the reference counts.\n")
   }
 
-  invisible(stats::setNames(man$present, man$key))
+  out <- stats::setNames(man$present, man$key)
+  attr(out, "drift") <- man$key[man$drift]
+  invisible(out)
+}
+
+
+#' Append one downloaded input to the provenance record.
+#'
+#' data/PROVENANCE.tsv accumulates a row per successful download -- when, from
+#' where, and a fingerprint of what arrived. It is append-only, so it is the
+#' history of this working copy rather than a snapshot.
+#'
+#' It lives under data/ and is therefore gitignored, deliberately: it describes
+#' YOUR copy, so committing it would mean merge conflicts over machine-specific
+#' facts. The shared reference is fn.reference_counts(), which is tracked.
+#'
+#' @param row One row of fn.data_manifest().
+#' @param dir.data Data root.
+#' @return Path to the provenance file, invisibly.
+fn.record_provenance <- function(row, dir.data) {
+
+  f  <- file.path(dir.data, "PROVENANCE.tsv")
+  fp <- fn.input_fingerprint(row, dir.data)
+
+  if (!file.exists(f))
+    cat("fetched\tinput\tn\tunit\tbytes\tmd5\turl\n", file = f)
+
+  cat(sprintf("%s\t%s\t%s\t%s\t%.0f\t%s\t%s\n",
+              format(Sys.time(), "%Y-%m-%dT%H:%M:%S"), row$key,
+              if (is.na(fp$n)) "NA" else fp$n, fp$unit,
+              if (is.na(fp$bytes)) 0 else fp$bytes,
+              if (is.na(fp$md5)) "NA" else fp$md5, row$url),
+      file = f, append = TRUE)
+
+  invisible(f)
 }
 
 
@@ -255,7 +444,8 @@ fn.check_inputs <- function(dir.data, file.gdb = NULL, stop.on.missing = TRUE,
 #'
 #' Skips anything already on disk, so it is safe to re-run. Each download is
 #' wrapped so one unreachable endpoint does not abort the rest -- a failure is
-#' reported with the page to fetch that dataset from by hand.
+#' reported with the page to fetch that dataset from by hand. Whatever is
+#' fetched is appended to data/PROVENANCE.tsv.
 #'
 #' @param dir.data Data root.
 #' @param overwrite Re-download inputs that are already present.
@@ -288,9 +478,12 @@ fn.pull_all <- function(dir.data, overwrite = FALSE) {
               call. = FALSE)
     } else {
       ok[i] <- isTRUE(fn.input_found(row, dir.data)$present)
-      if (!ok[i])
+      if (!ok[i]) {
         warning(sprintf("%s downloaded but does not match the expected shape: %s",
                         row$key, row$expects), call. = FALSE)
+      } else {
+        fn.record_provenance(row, dir.data)
+      }
     }
   }
 

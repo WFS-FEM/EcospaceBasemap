@@ -23,6 +23,7 @@ to red tides, stock assessment, and catch advice for Gulf of Mexico reef fish*
 - [How it is organised](#how-it-is-organised)
 - [Requirements](#requirements)
 - [Getting the data](#getting-the-data)
+  - [Knowing which vintage you hold](#knowing-which-vintage-you-hold)
 - [The driver script, section by section](#the-driver-script-section-by-section)
   - [1. Depth and exclusion](#1-depth-and-exclusion)
   - [2.1 Seagrass](#21-seagrass)
@@ -120,6 +121,13 @@ Everything else is repo-relative, so a clone runs with no edits to tracked code.
 vintage of `Seagrass_Statewide/` or `reeflocations.csv`, it stays put — the FWC
 endpoints serve the *current* compilation, and re-fetching would quietly change
 your results. Pass `overwrite = TRUE` only when you actually want the newer data.
+
+The flip side is that you and a collaborator can end up holding different data
+without either of you noticing, so every run prints what it is working from and
+flags `DRIFT` when a count has moved — see
+[Knowing which vintage you hold](#knowing-which-vintage-you-hold). If your table
+shows `DRIFT` and theirs does not, that is the explanation for a diff you cannot
+otherwise account for.
 
 ### Contributing changes
 
@@ -281,9 +289,49 @@ filenames and labels the plot as the FWC source.
 > Section 5 regenerates the *un-edited* age-0 grid; the combine step reads the
 > edited file from `data/regions/`. Do not overwrite it with generated output.
 
-> **Vintage.** The two FWC downloads serve the *current* published compilation,
-> not the vintage the legacy scripts used. FWC revises both layers periodically,
-> so a run today is not guaranteed to reproduce an older run cell for cell.
+### Knowing which vintage you hold
+
+The two FWC downloads serve the **current** published compilation, not a pinned
+version — the URL is stable but the bytes behind it are not. Combined with
+`fn.pull_all()` skipping inputs already on disk, that means *which* data you hold
+depends on when you first cloned. Two people can run identical code, see identical
+console output, and work from different inputs.
+
+So `fn.check_inputs()` counts what is actually there and compares it against
+`fn.reference_counts()` — the counts measured on the copies that produced the
+verified 5 arc-min basemaps:
+
+```
+  input                        sect  need      source  holding          status
+  seagrass_fwc                 2.1   optional  auto    86,173 features  OK
+  artificial_reefs_fwc         2.4   optional  auto    4,611 lines      DRIFT
+```
+
+`DRIFT` is a flag, **not an error** — the run continues. FWC adding deployments is
+legitimate; it just should not pass unnoticed. It tells you your grids will not
+match a run built from the reference data, which is exactly the thing that is
+otherwise invisible.
+
+Two notes on the counts. Shapefiles report **features**, taken from the `.shx`
+index and verified against `terra::vect()`. CSVs report **lines, not records**: no
+cheap base-R method reproduces `read.csv()`'s record count on files with embedded
+newlines, and a number that is quietly wrong is worse than one that is honestly
+labelled. `reeflocations.csv` is 4,550 lines for the 4,548 records FWC reports.
+
+`fn.pull_all()` also appends to **`data/PROVENANCE.tsv`** — date, source, count,
+size and MD5 for each download. It is gitignored, because it describes *your*
+copy; the shared reference is `fn.reference_counts()` in
+`R/data_setup_functions.R`. It only records downloads made by this code, so if you
+already had the data it will be empty — the status table above is the live picture
+either way.
+
+If you deliberately move to newer FWC data, update `fn.reference_counts()` in the
+same commit as a run showing the new data still produces a sensible basemap.
+
+> **Pinning.** For true bit-reproducibility the two FWC layers would need to be
+> archived somewhere stable (a Zenodo DOI, say) and fetched from there. Both are
+> public FWC data, so that is permissible — it is an open question rather than a
+> limitation.
 
 ---
 
@@ -437,8 +485,17 @@ Two sources joined by **fuzzy string matching**, because they share no key:
 The pipeline fills missing relief *within* the FWC table by matching
 descriptions, then joins structures to FWC relief in three passes of increasing
 permissiveness (exact → quote-stripped → fuzzy), then splits relief into
-Low/Medium/High by 1-D k-means. At 5 min: 2,446 exact, 29 quote-stripped, 10
-fuzzy, 0 unmatched.
+Low/Medium/High by 1-D k-means. At 5 min, on the original table: 2,446 exact,
+29 quote-stripped, 10 fuzzy, 0 unmatched.
+
+> **A worked example of vintage drift.** The same join against the FWC table as
+> downloaded in September 2026 gives 2,475 exact, **0** quote-stripped, 10 fuzzy,
+> 0 unmatched. FWC cleaned the smart quotes out of `Description`, so the
+> quote-stripping pass has nothing left to do — and 2,446 + 29 = 2,475, so every
+> structure still matched the same record and the output was unchanged. The
+> source moved; the result did not, because the join was robust enough to absorb
+> it. Next time it might not be, which is why
+> [the count check](#knowing-which-vintage-you-hold) exists.
 
 > **The output is not a proportion.** With `weight.by.relief = TRUE` (the legacy
 > default) each cell holds `sum(area_m2 × relief_m) / 1e6 / cell_area_km2`.
