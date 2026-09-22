@@ -19,6 +19,7 @@ to red tides, stock assessment, and catch advice for Gulf of Mexico reef fish*
 ## Contents
 
 - [Quick start](#quick-start)
+- [For collaborators](#for-collaborators)
 - [How it is organised](#how-it-is-organised)
 - [Requirements](#requirements)
 - [Getting the data](#getting-the-data)
@@ -93,6 +94,49 @@ Rough runtimes at 5 arc-min on a laptop:
 | 3 management areas | seconds | — |
 | 4 ports | ~5 s | — |
 | 5 regions | ~30 s | O(n²) kernel density |
+
+---
+
+## For collaborators
+
+### Your paths are yours
+
+Everyone working on this keeps their own `config.local.R` in the repo root. It is
+gitignored deliberately, so nobody's machine layout is ever committed and two
+people's paths cannot collide. Copy `config.local.example.R` and set only what you
+need:
+
+| setting | default | set it when |
+|---|---|---|
+| `dir.data` | `<repo>/data` | your inputs live on a shared or network drive, or several clones share one data store |
+| `dir.basemaps` | `<repo>/output/<res>min` | the grids should land somewhere else — a OneDrive folder the team syncs, say |
+| `file.gdb` | `NULL` (discovered by extension) | you want to read the 274 MB GFISHER geodatabase where it already sits, rather than keep a copy in `data/` |
+
+Everything else is repo-relative, so a clone runs with no edits to tracked code.
+
+### Downloads never overwrite what you already have
+
+`fn.pull_all()` skips any input already on disk. If you are holding a particular
+vintage of `Seagrass_Statewide/` or `reeflocations.csv`, it stays put — the FWC
+endpoints serve the *current* compilation, and re-fetching would quietly change
+your results. Pass `overwrite = TRUE` only when you actually want the newer data.
+
+### Contributing changes
+
+```bash
+git checkout -b short-description-of-change   # never commit straight to main
+# ... work, commit ...
+git push -u origin short-description-of-change
+```
+
+Then open a pull request on GitHub, base `main`, and request a review. Answer
+review comments by pushing more commits to the same branch — the PR updates
+itself. Pushing a branch changes nothing for anyone else; `main` only moves when
+someone merges.
+
+Before you push, check that `git status` is clean and that your commits touch no
+`data/` or `output/` paths. Both are gitignored, but the geodatabase is 274 MB and
+that is the one mistake that is genuinely painful to undo.
 
 ---
 
