@@ -21,7 +21,7 @@ to red tides, stock assessment, and catch advice for Gulf of Mexico reef fish*
 - [Quick start](#quick-start)
 - [How it is organised](#how-it-is-organised)
 - [Requirements](#requirements)
-- [Input data](#input-data)
+- [Getting the data](#getting-the-data)
 - [The driver script, section by section](#the-driver-script-section-by-section)
   - [1. Depth and exclusion](#1-depth-and-exclusion)
   - [2.1 Seagrass](#21-seagrass)
@@ -42,14 +42,38 @@ to red tides, stock assessment, and catch advice for Gulf of Mexico reef fish*
 ## Quick start
 
 ```r
-# 1. open make_WFS_basemaps.R
-# 2. set the three paths and the resolution at the top:
-res          <- 5          # grid resolution, arc-minutes
-bbox         <- c(-87.5, -81, 25, 30.5)
-excl.depth   <- 500        # m; deeper cells are outside the model domain
-dir.basemaps <- ".../Ecospace/basemaps/5min"   # output root, OUTSIDE this repo
-# 3. source the whole file, or step through it section by section
+# 1. open EcospaceBasemap.Rproj  (this sets the working directory, which the
+#    driver checks for before doing anything)
+# 2. open make_WFS_basemaps.R and source it, or step through section by section
 ```
+
+Every path is repo-relative, so **a fresh clone needs no path editing**. Inputs
+are read from `data/`, grids are written to `output/5min/`. The driver opens by
+provisioning and checking its inputs:
+
+```r
+fn.pull_all(dir.data)                          # download what downloads itself
+have <- fn.check_inputs(dir.data, file.gdb)    # report the rest, stop if required
+```
+
+On a fresh clone that prints a table of all nine inputs, fetches the four that
+are public, and — for the two that cannot be redistributed — tells you where to
+request them and exactly where to put them. See
+[Getting the data](#getting-the-data).
+
+The knobs worth changing are at the top of the driver:
+
+```r
+res        <- 5                      # grid resolution, arc-minutes
+bbox       <- c(-87.5, -81, 25, 30.5)
+excl.depth <- 500                    # m; deeper cells are outside the domain
+```
+
+To read data from, or write grids to, somewhere other than the repo, copy
+`config.local.example.R` to `config.local.R` and set `dir.data`, `dir.basemaps`
+or `file.gdb` there. `config.local.R` is gitignored, so machine-specific paths
+never reach the repository — it is the only file a second user should need to
+touch.
 
 The script is written to be **stepped through interactively**. Each section
 leaves its result in the workspace (`depth`, `seagrass`, `seabed`, `gfisher`,
@@ -77,7 +101,9 @@ Rough runtimes at 5 arc-min on a laptop:
 ```
 EcospaceBasemap/
 ├── make_WFS_basemaps.R          the control script - the only file you edit
+├── config.local.example.R       template for machine-specific path overrides
 ├── R/                           functions, sourced wholesale by the driver
+│   ├── data_setup_functions.R   the input manifest, and the check/pull helpers
 │   ├── seagrass_functions.R
 │   ├── dbSEABED_functions.R
 │   ├── GFISHER functions.R
@@ -86,9 +112,14 @@ EcospaceBasemap/
 │   ├── management_area_functions.R
 │   ├── port_functions.R
 │   └── region_functions.R
-├── data/                        input data - gitignored, see below
-└── output/                      scratch; real output goes to dir.basemaps
+├── data/                        input data - mostly gitignored, see below
+└── output/5min/                 generated grids - gitignored
 ```
+
+`R/data_setup_functions.R` is the single place that records what each input is,
+where it comes from, and what shape it has to be on disk. The driver, its error
+messages and the data table below all read from that one manifest, so they cannot
+drift apart.
 
 The driver opens by sourcing everything in `R/`:
 
@@ -113,7 +144,7 @@ installed — but the docs are written so it could become one.
 
 ## Requirements
 
-R ≥ 4.4. Packages:
+R ≥ 4.4, and no path editing — see [Quick start](#quick-start). Packages:
 
 ```r
 install.packages(c("terra","sf","marmap","maps","colorRamps",   # core
@@ -126,34 +157,89 @@ It is never attached.
 
 ---
 
-## Input data
+## Getting the data
 
 Most of `data/` is **gitignored** — roughly 628 MB, dominated by the GFISHER
 geodatabase and the seagrass shapefiles. `Seagrass_Statewide.shp` alone is
-230 MB, over GitHub's 100 MB per-file hard limit.
+230 MB, over GitHub's 100 MB per-file hard limit. A clone therefore starts with
+**3 of the 9 inputs present**.
 
-Three small folders **are tracked** (~12 MB), because they are either
-irreplaceable or awkward to re-source: `data/regions/`, `data/management_areas/`
-and `data/ports/`. Everything else has to be downloaded or supplied. The
-**tracked** column below says which is which.
+Run the driver, or just these two lines, and it will tell you where you stand:
 
-| directory | tracked | size | contents | how to get it |
+```r
+fn.pull_all(dir.data)     # fetches everything marked "auto"; skips what is there
+fn.check_inputs(dir.data) # prints the table below against your actual disk
+```
+
+| input | § | source | size | how to get it |
 |---|---|---|---|---|
-| `data/regions/` | **yes** | 7 MB | `age0_survey_regions.shp` (+ sidecars), `age0_survey_regions_5min_mod.asc`, `env3LABS_93to24.csv` | in the repo |
-| `data/management_areas/` | **yes** | 1 MB | 8 zipped shapefiles | in the repo (orig. GulfCouncil / SERO) |
-| `data/ports/` | **yes** | 4 MB | `ReportCreatorResults-County.csv`, `MRIP WFS gag and red grouper dtrips by county.csv` | in the repo (orig. FWC ReportCreator; NOAA MRIP) |
-| `data/dbseabed/` | no | 9 MB | `Gmf_GVL/`, `Gmf_MUD/`, `Gmf_RCK/`, `Gmf_SND/` | downloads via `fn.pull_dbseabed()` |
-| `data/seagrass/` | no | 330 MB | `GulfwideSAV/`, `Seagrass_Statewide/` | Gulfwide downloads via `fn.pull_seagrass()`; the FWC statewide layer must be supplied |
-| `data/GFISHER_EAST_Universe_2026.gdb/` | no | 275 MB | FWRI East Gulf side-scan geodatabase | supplied by FWRI |
-| `data/artificial_reefs/` | no | 5 MB | `dataS2_artificial_reef_structures_REDACTED.csv`, `reeflocations.csv` | published AR structure database; FWC deployment table |
+| `data/regions/` | 5 | in the repo | 7 MB | **ships** — `age0_survey_regions.shp` (+ sidecars), `age0_survey_regions_5min_mod.asc`, `env3LABS_93to24.csv` |
+| `data/management_areas/` | 3 | in the repo | 1 MB | **ships** — 8 zipped shapefiles (orig. Gulf Council / SERO) |
+| `data/ports/` | 4 | in the repo | 4 MB | **ships** — FWC ReportCreator + NOAA MRIP tables |
+| `data/dbseabed/` | 2.2 | CSDMS | 9 MB | **auto** — `fn.pull_dbseabed()` |
+| `data/seagrass/GulfwideSAV/` | 2.1 | NOAA NCEI | 100 MB | **auto** — `fn.pull_seagrass()` |
+| `data/seagrass/Seagrass_Statewide/` | 2.1 | FWC open data | 230 MB | **auto** — `fn.pull_seagrass_fwc()` *(optional)* |
+| `data/artificial_reefs/reeflocations.csv` | 2.4 | FWC open data | 1 MB | **auto** — `fn.pull_reeflocations()` *(optional)* |
+| `data/*.gdb/` | 2.3 | FWRI | 275 MB | **by hand** — request from FWRI |
+| `data/artificial_reefs/dataS2_..._REDACTED.csv` | 2.4 | published AR structure database | 3 MB | **by hand** — check terms |
 
-The two untracked non-downloadable sets — the GFISHER geodatabase and the
-`REDACTED` artificial-reef database — are left out on redistribution grounds as
-well as size; check their terms before publishing them anywhere.
+### The two that cannot ship
+
+Both are excluded on redistribution grounds as well as size. Check their terms
+before publishing them anywhere.
+
+**GFISHER geodatabase** (§2.3, required). The FWRI East Gulf side-scan universe,
+e.g. `GFISHER_EAST_Universe_2026.gdb`. Not publicly downloadable — request it
+from FWRI. Put the `.gdb` directory **directly in `data/`**, where it is found by
+extension; or leave it wherever it already lives and name it with `file.gdb` in
+`config.local.R`, which avoids a second 274 MB copy.
+
+**Artificial reef structure database** (§2.4, required).
+`dataS2_artificial_reef_structures_REDACTED.csv`, the supplementary data table of
+the published AR structure database. Place it in `data/artificial_reefs/`. The
+pipeline reads it with `read.csv(row.names = 1)` and uses the columns `state`,
+`description`, `lat_dd`, `long_dd`, `area_m2`, keeping the `FL_GOM` rows.
+
+### What happens without the optional two
+
+Neither stops a run; both degrade, loudly.
+
+- **No `Seagrass_Statewide/`** — §2.1 uses GulfwideSAV alone. Gulfwide is the
+  wider source (roughly twice the coverage), so the map loses only what FWC maps
+  and Gulfwide does not.
+- **No `reeflocations.csv`** — §2.4 has no relief, so it falls back to
+  `weight.by.relief = FALSE` (a genuine covered fraction, which is arguably the
+  more defensible layer anyway) and writes `AR_prop_area_{Low,Medium,High}` as
+  zero grids, since relief is what the k-means split classifies on.
+
+### Expected `data/` tree
+
+```
+data/
+├── GFISHER_EAST_Universe_2026.gdb/     by hand, from FWRI
+├── artificial_reefs/
+│   ├── dataS2_artificial_reef_structures_REDACTED.csv   by hand
+│   └── reeflocations.csv                                auto (FWC)
+├── dbseabed/
+│   ├── Gmf_GVL/  Gmf_MUD/  Gmf_RCK/  Gmf_SND/           auto (CSDMS)
+├── management_areas/                   ships - 8 zips
+├── ports/                              ships - 2 CSVs
+├── regions/                            ships - shapefile, .asc, .csv
+└── seagrass/
+    ├── GulfwideSAV/                    auto (NOAA NCEI)
+    └── Seagrass_Statewide/             auto (FWC)
+```
+
+The `Seagrass_Statewide` directory name is not cosmetic — it goes into output
+filenames and labels the plot as the FWC source.
 
 > **`age0_survey_regions_5min_mod.asc` is hand-edited and is an INPUT.**
 > Section 5 regenerates the *un-edited* age-0 grid; the combine step reads the
 > edited file from `data/regions/`. Do not overwrite it with generated output.
+
+> **Vintage.** The two FWC downloads serve the *current* published compilation,
+> not the vintage the legacy scripts used. FWC revises both layers periodically,
+> so a run today is not guaranteed to reproduce an older run cell for cell.
 
 ---
 
@@ -215,6 +301,10 @@ whenever you build a new resolution, since nesting is a property of the polygons
 but cell size governs how much distinct bed area gets mixed into one cell.
 
 **Writes** one grid per source plus `seagrass_coverage_combined_5min.asc`.
+
+Both sources download themselves (`fn.pull_seagrass()`, `fn.pull_seagrass_fwc()`).
+The FWC layer is optional: without it the section uses GulfwideSAV alone and
+writes no combined grid — see [Getting the data](#getting-the-data).
 
 ![Seagrass](docs/img/02-1-seagrass.png)
 
@@ -314,6 +404,13 @@ fuzzy, 0 unmatched.
 > relief-weighted index. Set `weight.by.relief = FALSE` for the genuine fraction.
 
 **Writes** `AR_prop_area_{all,Low,Medium,High}_5min.asc` and a 2×2 panel.
+
+`reeflocations.csv` downloads itself (`fn.pull_reeflocations()`) and is optional:
+relief is the only thing the k-means split classifies on, so without it the
+section runs `weight.by.relief = FALSE` and writes the three class layers as
+zeros. Note FWC publishes `Relief` in **feet** while the weighting treats it as
+metres — carried over from the legacy script and left alone so output stays
+comparable.
 
 ![Artificial reefs](docs/img/02-4-artificial-reefs.png)
 
