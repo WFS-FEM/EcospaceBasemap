@@ -44,7 +44,7 @@ library('terra')
 #' @export
 fn.pull_dbseabed <- function(dir.out){
   
-  #dir.out = "C:\\Users\\dchagaris\\Github\\WFS-FEM\\EnvironmentalDrivers2EwE\\data\\dbSEABED"
+  #dir.out = file.path(dir.data, "dbseabed")
   
   message('dbSEABED Zipfile sets for % gravel, sand, mud, and rock in Northern Gulf of Mexico will be downloaded from\nhttps://csdms.colorado.edu/wiki/DBSEABED#Data_for_Modellers') 
   
@@ -53,7 +53,13 @@ fn.pull_dbseabed <- function(dir.out){
                 "https://csdms.colorado.edu/csdms_wiki/images/Gmf_MUD.zip",
                 "https://csdms.colorado.edu/csdms_wiki/images/Gmf_RCK.zip")
 
-  
+  # R aborts a download at 60 s by default, which these archives can exceed on
+  # an ordinary connection.
+  op <- options(timeout = max(3600, getOption("timeout")))
+  on.exit(options(op), add = TRUE)
+
+  if (!dir.exists(dir.out)) dir.create(dir.out, recursive = TRUE)
+
   for(i in 1:length(url.set)){
     url = url.set[i]
     file.out = file.path(dir.out,basename(url))
@@ -128,8 +134,8 @@ fn.pull_dbseabed <- function(dir.out){
 #' @export
 fn.make_dbseabed_ascii <- function(dir.dbseabed, dir.ascii, depth, resample.method='near'){
   
-  # dir.dbseabed = "C:\\Users\\dchagaris\\Github\\WFS-FEM\\EnvironmentalDrivers2EwE\\data\\dbSEABED"
-  # dir.ascii = "C:\\Users\\dchagaris\\OneDrive - University of Florida\\WFS Fisheries Ecosystem Modeling\\WFS EwE\\Ecospace\\maps\\dbsEABED"
+  # dir.dbseabed = file.path(dir.data, "dbseabed")
+  # dir.ascii = file.path(dir.habitats, "dbseabed")
   # depth = terra::rast(depth.15min)
   
   dirs.dbseabed = list.dirs(dir.dbseabed, recursive=F)
@@ -229,8 +235,8 @@ fn.make_dbseabed_ascii <- function(dir.dbseabed, dir.ascii, depth, resample.meth
 #'   dbSEABED subdirectory, masked to the depth grid.
 fn.rasterize_dbseabed <- function(dir.dbseabed, depth, resample.method='near', dir.out){
   
-  # dir.dbseabed = "C:\\Users\\dchagaris\\Github\\WFS-FEM\\EnvironmentalDrivers2EwE\\data\\dbSEABED"
-  # dir.ascii = "C:\\Users\\dchagaris\\OneDrive - University of Florida\\WFS Fisheries Ecosystem Modeling\\WFS EwE\\Ecospace\\maps\\dbsEABED"
+  # dir.dbseabed = file.path(dir.data, "dbseabed")
+  # dir.ascii = file.path(dir.habitats, "dbseabed")
   # depth = terra::rast(depth.15min)
   
   dirs.dbseabed = list.dirs(dir.dbseabed, recursive=F)

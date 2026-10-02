@@ -1,5 +1,24 @@
-rm(list=ls());rm(.SavedPlots);graphics.off();gc();windows(record=T)
-getwd()
+#Control script for the WFS Ecospace basemaps.
+#
+#Every path below is repo-relative, so a fresh clone runs without editing this
+#file. To read data from, or write outputs to, somewhere else, put a
+#config.local.R in the repo root - it is gitignored, and config.local.example.R
+#shows what goes in it.
+#
+#Written to be stepped through interactively: each section leaves its result in
+#the workspace (depth, seagrass, seabed, gfisher, ar, basemap, ma, ports,
+#regions) so you can inspect or re-plot without re-running the expensive parts.
+
+rm(list=ls());graphics.off();gc()
+if(interactive() && .Platform$OS.type=='windows'){
+  try(rm(.SavedPlots,envir=.GlobalEnv),silent=TRUE)  #RGui plot history
+  try(dev.new(record=TRUE),silent=TRUE)
+}
+
+#everything downstream is resolved from the working directory, so check it first
+if(!file.exists('EcospaceBasemap.Rproj'))
+  stop('Set the working directory to the repo root - open EcospaceBasemap.Rproj, ',
+       'or setwd() there. Currently: ',getwd())
 
 #load (source) all the functions in the R folder
 #sourced BEFORE the library() calls below: if a function file ever attaches
@@ -17,13 +36,30 @@ library('colorRamps')
 res <- 5 #minutes
 bbox <- c(-87.5,-81,25,30.5) #decimal degrees
 excl.depth <- 500 #meters
-dir.basemaps <- file.path("C:/Users/dchagaris/OneDrive - University of Florida/WFS Fisheries Ecosystem Modeling/WFS EwE/Ecospace/basemaps",paste0(res,'min'))
+
+#paths - repo-relative defaults, overridable in config.local.R
+dir.data     <- file.path(getwd(),'data')                     #source data
+dir.basemaps <- file.path(getwd(),'output',paste0(res,'min')) #generated grids
+file.gdb     <- NULL  #NULL discovers a single .gdb inside dir.data
+
+if(file.exists('config.local.R')){
+  source('config.local.R')
+  message('Applied local path overrides from config.local.R')
+}
+
 dir.depth <- file.path(dir.basemaps,'depth')
 dir.habitats <- file.path(dir.basemaps,"habitat")
-sapply(c(dir.basemaps,dir.depth,dir.habitats),dir.create)
+invisible(lapply(c(dir.basemaps,dir.depth,dir.habitats),dir.create,
+                 recursive=TRUE,showWarnings=FALSE))
 
-dir.out <- file.path(getwd(),'output')
-dir.data <- file.path(getwd(),'data')
+#INPUT DATA---------------------
+#Most of data/ is gitignored, so a clone starts with 3 of the 9 inputs present.
+#fn.pull_all() fetches everything that downloads itself and skips what is already
+#there; fn.check_inputs() then reports what is present, stops if a REQUIRED input
+#is missing, and prints where to obtain it. R/data_setup_functions.R holds the
+#manifest both of them read from.
+fn.pull_all(dir.data)
+have <- fn.check_inputs(dir.data, file.gdb=file.gdb)
 
 #1. depth-----------
 ##pull data----
@@ -60,19 +96,17 @@ dev.off()
 
 #2. habitats--------
 ##2.1 seagrass--------------------------------------------------------------------------------------
-###pull data----
-fn.pull_seagrass(dir.out = file.path(dir.data,'seagrass'))
-
 ###output----
-dir.create(file.path(dir.habitats,'seagrass'), recursive=T)
+dir.create(file.path(dir.habitats,'seagrass'), recursive=T, showWarnings=F)
 seagrass.prop.gulf <- fn.make_seagrass_ascii(dir.seagrass= file.path(dir.data,'seagrass',"GulfwideSAV"),
                                              dir.ascii = file.path(dir.habitats,'seagrass'), depth = depth)
-
-seagrass.prop.fwc <- fn.make_seagrass_ascii(dir.seagrass= file.path(dir.data,'seagrass',"Seagrass_Statewide"),
-                                            dir.ascii = file.path(dir.habitats,'seagrass'), depth = depth)
-
 plot(seagrass.prop.gulf)
-plot(seagrass.prop.fwc)
+
+if(have[['seagrass_fwc']]){
+  seagrass.prop.fwc <- fn.make_seagrass_ascii(dir.seagrass= file.path(dir.data,'seagrass',"Seagrass_Statewide"),
+                                              dir.ascii = file.path(dir.habitats,'seagrass'), depth = depth)
+  plot(seagrass.prop.fwc)
+}
 
 ###combine the two sources----
 #The two layers map the SAME beds, not different ones (186 of 247 Gulfwide cells
@@ -90,11 +124,21 @@ plot(seagrass.prop.fwc)
 #Vintage caveat: GulfwideSAV carries hab_88/hab_92 fields and reports ~2x the
 #coverage of the newer FWC layer, so the union is closer to historical maximum
 #extent than to current extent.
-seagrass <- fn.combine_seagrass_rasters(c(seagrass.prop.gulf, seagrass.prop.fwc),
-                                        method    = 'max',
-                                        depth     = depth,
-                                        dir.ascii = file.path(dir.habitats,'seagrass'),
-                                        label     = 'combined')
+#
+#Without the FWC layer there is nothing to combine: GulfwideSAV is the wider of
+#the two anyway (roughly twice the coverage), so the map is the union minus
+#whatever FWC maps and Gulfwide does not. Section 2.5 is unaffected in shape.
+if(have[['seagrass_fwc']]){
+  seagrass <- fn.combine_seagrass_rasters(c(seagrass.prop.gulf, seagrass.prop.fwc),
+                                          method    = 'max',
+                                          depth     = depth,
+                                          dir.ascii = file.path(dir.habitats,'seagrass'),
+                                          label     = 'combined')
+} else {
+  warning('FWC Seagrass_Statewide is missing - section 2.1 uses GulfwideSAV alone. ',
+          'Run fn.pull_all(dir.data) to fetch it.', call.=FALSE)
+  seagrass <- seagrass.prop.gulf
+}
 plot(seagrass)
 
 #the polygon route, for validation - slow (~5 min: reading and repairing ~90k
@@ -106,10 +150,6 @@ plot(seagrass)
 
 ##2.2 dbSeabed----
 dir.dbseabed <- file.path(dir.data,'dbseabed')
-###pull data----
-if(length(list.files(file.path(dir.data,'dbseabed'),pattern=".asc",recursive=T))<4){
-fn.pull_dbseabed(dir.out = dir.dbseabed)
-}
 
 ###make rasters----
 seabed <- fn.rasterize_dbseabed(dir.dbseabed = file.path(dir.data,'dbseabed'), dir.out=file.path(dir.habitats,'dbseabed'),
@@ -120,8 +160,10 @@ seabed <- fn.rasterize_dbseabed(dir.dbseabed = file.path(dir.data,'dbseabed'), d
 fn.plot_dbseabed(seabed, dir.maps = file.path(dir.habitats,'dbseabed'))
 
 ##2.3 GFISHER----
-dir.create(file.path(dir.habitats,'gfisher'), recursive = TRUE)
-file.gfishergdb = list.files(dir.data,pattern=".gdb",full.names = T)
+dir.create(file.path(dir.habitats,'gfisher'), recursive = TRUE, showWarnings = FALSE)
+#set explicitly with file.gdb in config.local.R, or discovered by extension
+file.gfishergdb = if(!is.null(file.gdb)) file.gdb else
+  list.files(dir.data,pattern="\\.gdb$",full.names = T)[1]
 
 ###make rasters----
 #natural classes are extrapolated beyond the side-scan footprint out to the
@@ -146,13 +188,16 @@ fn.plot_GFISHER_habitats(gfisher, dir.maps=file.path(dir.habitats,'gfisher'),
 #deployment table (reeflocations) carries relief but is keyed only by free-text
 #description, so the two are joined by fuzzy string matching. Slow (~2 min at
 #5 min resolution) - the fuzzy joins dominate, not the rasterizing.
+#Without reeflocations.csv there is no relief, so the run falls back to
+#unweighted footprint area and writes the Low/Medium/High layers as zeros.
 dir.ar <- file.path(dir.habitats,'artificial_reefs')
-dir.create(dir.ar, recursive=T)
+dir.create(dir.ar, recursive=T, showWarnings=F)
 
 ar <- fn.make_AR_maps(depth     = depth,
                       file.ar   = file.path(dir.data,'artificial_reefs',
                                             'dataS2_artificial_reef_structures_REDACTED.csv'),
-                      file.reef = file.path(dir.data,'artificial_reefs','reeflocations.csv'),
+                      file.reef = if(have[['artificial_reefs_fwc']])
+                                    file.path(dir.data,'artificial_reefs','reeflocations.csv'),
                       dir.maps  = dir.ar)
 
 ###plots----

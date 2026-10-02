@@ -1,3 +1,7 @@
+# Local path overrides. Every machine-specific path lives here, never in
+# tracked code; config.local.example.R shows what goes in it.
+config.local.R
+
 # R session cruft
 .Rhistory
 .RData

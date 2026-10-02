@@ -22,6 +22,82 @@
 #' the note at the top of R/GFISHER functions.R.
 
 
+#' Download the FWC artificial reef deployment table.
+#'
+#' "Artificial Reefs in Florida" from the FWC open data portal -- the statewide
+#' deployment database, about 4,500 records, which is the source of the relief
+#' heights section 2.4 needs. Fetched from the ArcGIS Hub export endpoint for the
+#' published feature service.
+#'
+#' The download is normalised to the contract fn.make_AR_maps() reads against,
+#' because that reader is unchanged from the legacy script:
+#'   utils::read.csv(file.reef, row.names = 1, fileEncoding = "windows-1252")
+#' so the file is written with a leading row-name column, and text is
+#' transliterated to ASCII -- a subset of both UTF-8 and windows-1252 -- so the
+#' declared encoding cannot corrupt it. The columns the pipeline uses, Description
+#' and Relief, are already named that way in the FWC service.
+#'
+#' Units caveat: FWC publishes Relief in FEET (the service alias is "Relief (ft)"),
+#' while fn.make_AR_maps() multiplies footprint area by relief as though it were
+#' metres. That is carried over from the legacy script and is left alone here so
+#' output stays comparable; see the Units section of fn.make_AR_maps(). The layer
+#' is not dimensionless either way.
+#'
+#' @param dir.out Directory to write reeflocations.csv into.
+#' @param url Export endpoint. Overridable in case FWC republishes the layer.
+#' @param file.name Output filename; the driver expects reeflocations.csv.
+#' @return Path to the written file, invisibly.
+fn.pull_reeflocations <- function(dir.out,
+                                  url = paste0("https://opendata.arcgis.com/api/v3/datasets/",
+                                               "eb2bfd225149405bba23604f20159f56_12",
+                                               "/downloads/data?format=csv&spatialRefId=4326"),
+                                  file.name = "reeflocations.csv") {
+
+  page <- "https://geodata.myfwc.com/datasets/artificial-reefs-in-florida"
+  message("Downloading artificial reef deployment table from FWC\n", page)
+
+  op <- options(timeout = max(600, getOption("timeout")))
+  on.exit(options(op), add = TRUE)
+
+  if (!dir.exists(dir.out)) dir.create(dir.out, recursive = TRUE)
+
+  tmp <- tempfile(fileext = ".csv")
+  on.exit(unlink(tmp), add = TRUE)
+
+  ok <- try(utils::download.file(url, destfile = tmp, mode = "wb"), silent = TRUE)
+  if (inherits(ok, "try-error") || !file.exists(tmp))
+    stop("Could not download the FWC artificial reef table.\n",
+         "Download it as CSV by hand from ", page, "\n",
+         "and save it as ", file.path(dir.out, file.name), call. = FALSE)
+
+  reef <- utils::read.csv(tmp, stringsAsFactors = FALSE, fileEncoding = "UTF-8-BOM")
+
+  need <- c("Description", "Relief")
+  if (!all(need %in% names(reef)))
+    stop("The FWC table is missing the column(s) ",
+         paste(setdiff(need, names(reef)), collapse = ", "),
+         ".\nThe service may have been republished with a different schema; ",
+         "check ", page, call. = FALSE)
+
+  # ASCII is a subset of both UTF-8 and windows-1252, so transliterating here
+  # means the reader's declared encoding cannot mangle anything. The fuzzy
+  # matcher normalises smart quotes anyway (see fn.best_agrep_match).
+  chr <- vapply(reef, is.character, logical(1))
+  reef[chr] <- lapply(reef[chr], function(x)
+                      iconv(x, from = "UTF-8", to = "ASCII//TRANSLIT", sub = ""))
+
+  reef$Relief <- suppressWarnings(as.numeric(reef$Relief))
+
+  file.out <- file.path(dir.out, file.name)
+  utils::write.csv(reef, file.out, row.names = TRUE, fileEncoding = "UTF-8")
+
+  message(sprintf("%d deployment records (%d with relief) written to\n%s",
+                  nrow(reef), sum(reef$Relief > 0, na.rm = TRUE), file.out))
+
+  invisible(file.out)
+} #eof
+
+
 #' Best fuzzy match of one string against a vector of candidates.
 #'
 #' Two-stage: agrep() to shortlist, then adist() to pick the closest. Kept
@@ -207,7 +283,9 @@ fn.classify_ar_relief <- function(relief, k = 3,
 #'
 #' @param depth SpatRaster of positive depths (the template grid).
 #' @param file.ar Path to dataS2_artificial_reef_structures_REDACTED.csv.
-#' @param file.reef Path to reeflocations.csv.
+#' @param file.reef Path to reeflocations.csv, the source of relief height. NULL
+#'   or a path that does not exist runs the degraded path: unweighted footprint
+#'   area, and the relief classes written as zero grids.
 #' @param dir.maps Output directory.
 #' @param state Value of the `state` column to keep.
 #' @param weight.by.relief Multiply each structure's footprint by its relief
@@ -251,26 +329,48 @@ fn.make_AR_maps <- function(depth, file.ar, file.reef, dir.maps,
   if (verbose) message("Reading artificial reef data...")
   ar <- utils::read.csv(file.ar, row.names = 1, stringsAsFactors = FALSE,
                         allowEscapes = TRUE)
-  reef <- utils::read.csv(file.reef, row.names = 1, stringsAsFactors = FALSE,
-                          fileEncoding = "windows-1252")
+
+  # file.reef = NULL is the degraded path: the FWC deployment table is the only
+  # source of relief, so without it there is nothing to weight or classify by.
+  have.relief <- !is.null(file.reef) && nzchar(file.reef) && file.exists(file.reef)
+  if (!have.relief) {
+    if (isTRUE(weight.by.relief))
+      warning("No FWC deployment table, so relief is unavailable: falling back to ",
+              "weight.by.relief = FALSE and no relief classes. ",
+              "Run fn.pull_reeflocations() to restore it.", call. = FALSE)
+    weight.by.relief <- FALSE
+    fill.relief      <- FALSE
+  } else {
+    reef <- utils::read.csv(file.reef, row.names = 1, stringsAsFactors = FALSE,
+                            fileEncoding = "windows-1252")
+  }
 
   ar <- ar[ar$state == state & !is.na(ar$lat_dd) & !is.na(ar$long_dd), ]
   if (nrow(ar) == 0) stop("No records left after filtering to state = '", state, "'.")
   if (verbose) message(sprintf("  %d %s structures with coordinates", nrow(ar), state))
 
   # ---- relief -------------------------------------------------------------
-  if (isTRUE(fill.relief)) {
-    if (verbose) message("Filling missing relief in the FWC table...")
-    reef <- fn.fill_reef_relief(reef, max.distance = fill.distance,
-                                verbose = verbose)
-  }
-  if (verbose) message("Matching structures to FWC relief...")
-  ar <- fn.match_ar_relief(ar, reef, max.distance = match.distance,
-                           verbose = verbose)
+  if (have.relief) {
 
-  if (verbose) message("Classifying relief...")
-  cl <- fn.classify_ar_relief(ar$relief, seed = seed, verbose = verbose)
-  ar$relief_class <- cl$class
+    if (isTRUE(fill.relief)) {
+      if (verbose) message("Filling missing relief in the FWC table...")
+      reef <- fn.fill_reef_relief(reef, max.distance = fill.distance,
+                                  verbose = verbose)
+    }
+    if (verbose) message("Matching structures to FWC relief...")
+    ar <- fn.match_ar_relief(ar, reef, max.distance = match.distance,
+                             verbose = verbose)
+
+    if (verbose) message("Classifying relief...")
+    cl <- fn.classify_ar_relief(ar$relief, seed = seed, verbose = verbose)
+    ar$relief_class <- cl$class
+
+  } else {
+    # Every structure stays unclassified, so the Low/Medium/High layers below
+    # select no rows and are written as zero grids. "all" is unaffected.
+    ar$relief       <- NA_real_
+    ar$relief_class <- NA_character_
+  }
 
   # ---- the quantity being summed ------------------------------------------
   ar$value <- if (isTRUE(weight.by.relief)) ar$area_m2 * ar$relief else ar$area_m2
