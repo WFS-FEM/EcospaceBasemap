@@ -489,3 +489,57 @@ fn.pull_all <- function(dir.data, overwrite = FALSE) {
 
   invisible(ok)
 }
+
+
+#' Write an md5sum-style checksum manifest for a resolution's deliverables.
+#'
+#' Lists every tracked grid under `dir.basemaps` (the depth/ and habitat/
+#' subfolders, .asc/.prj/.csv) with its MD5, one per line in the format
+#' `md5sum -c` reads: `<md5>  <path>` with the path relative to `dir.basemaps`,
+#' forward slashes, LF line endings, sorted by path, so the file is identical
+#' whichever platform wrote it. A downstream repo that ships copies of these
+#' grids (GFISHER does) compares against this file rather than against a clone.
+#'
+#' @param dir.basemaps `output/<res>min`, the folder the driver writes into.
+#' @param subdirs Subfolders to include.
+#' @param pattern Regular expression selecting the files.
+#' @param file Output name, inside `dir.basemaps`.
+#' @return The manifest as a data.frame (md5, path), invisibly.
+fn.write_checksums <- function(dir.basemaps, subdirs = c("depth", "habitat"),
+                               pattern = "\\.(asc|prj|csv)$",
+                               file = "CHECKSUMS.md5") {
+  dirs  <- file.path(dir.basemaps, subdirs)
+  dirs  <- dirs[dir.exists(dirs)]
+  files <- unlist(lapply(dirs, list.files, pattern = pattern,
+                         recursive = TRUE, full.names = TRUE))
+  base  <- paste0(normalizePath(dir.basemaps, "/"), "/")
+  rel   <- substring(normalizePath(files, "/"), nchar(base) + 1)
+  ord   <- order(rel)
+  out   <- data.frame(md5 = unname(tools::md5sum(files))[ord], path = rel[ord],
+                      stringsAsFactors = FALSE)
+  con <- file(file.path(dir.basemaps, file), open = "wb")
+  on.exit(close(con))
+  writeLines(sprintf("%s  %s", out$md5, out$path), con, sep = "\n")
+  message(sprintf("%-24s %d files -> %s", "checksums", nrow(out),
+                  file.path(dir.basemaps, file)))
+  invisible(out)
+}
+
+
+#' Compare a folder's grids against its checksum manifest.
+#'
+#' @param dir.basemaps Folder holding `CHECKSUMS.md5` (see fn.write_checksums).
+#' @param file Manifest name.
+#' @return data.frame of the rows that differ or are missing (zero rows when
+#'   everything matches), invisibly; prints a one-line summary.
+fn.verify_checksums <- function(dir.basemaps, file = "CHECKSUMS.md5") {
+  lines <- readLines(file.path(dir.basemaps, file))
+  md5   <- substr(lines, 1, 32)
+  path  <- substring(lines, 35)
+  now   <- unname(tools::md5sum(file.path(dir.basemaps, path)))
+  bad   <- data.frame(path = path, expected = md5, found = now,
+                      stringsAsFactors = FALSE)[is.na(now) | now != md5, ]
+  message(sprintf("%-24s %d of %d files match %s", "checksums",
+                  length(path) - nrow(bad), length(path), file))
+  invisible(bad)
+}

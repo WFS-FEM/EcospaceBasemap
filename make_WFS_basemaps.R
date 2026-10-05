@@ -229,6 +229,11 @@ basemap <- fn.combine_habitats_sum1(depth     = depth,
 ###plots----
 fn.plot_habitat_basemap(basemap, dir.maps = dir.sum1)
 
+###checksums----
+#One md5sum-style manifest per resolution, covering every tracked grid under
+#depth/ and habitat/. GFISHER verifies its shipped copies against this file.
+fn.write_checksums(dir.basemaps)
+
 
 #3. management areas------------
 #One grid per management area, aligned to the depth template:
