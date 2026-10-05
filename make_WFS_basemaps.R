@@ -55,7 +55,7 @@ invisible(lapply(c(dir.basemaps,dir.depth,dir.habitats),dir.create,
                  recursive=TRUE,showWarnings=FALSE))
 
 #INPUT DATA---------------------
-#Most of data/ is gitignored, so a clone starts with 3 of the 9 inputs present.
+#Most of data/ is gitignored, so a clone starts with 4 of the 9 inputs present.
 #fn.pull_all() fetches everything that downloads itself and skips what is already
 #there; fn.check_inputs() then reports what is present, stops if a REQUIRED input
 #is missing, and prints where to obtain it. R/data_setup_functions.R holds the

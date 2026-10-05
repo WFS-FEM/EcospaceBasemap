@@ -214,7 +214,7 @@ It is never attached.
 Most of `data/` is **gitignored** — roughly 628 MB, dominated by the GFISHER
 geodatabase and the seagrass shapefiles. `Seagrass_Statewide.shp` alone is
 230 MB, over GitHub's 100 MB per-file hard limit. A clone therefore starts with
-**3 of the 9 inputs present**.
+**4 of the 9 inputs present**.
 
 Run the driver, or just these two lines, and it will tell you where you stand:
 
@@ -228,7 +228,7 @@ fn.check_inputs(dir.data) # prints the table below against your actual disk
 | `data/regions/` | 5 | in the repo | 7 MB | **ships** — `age0_survey_regions.shp` (+ sidecars), `age0_survey_regions_5min_mod.asc`, `env3LABS_93to24.csv` |
 | `data/management_areas/` | 3 | in the repo | 1 MB | **ships** — 8 zipped shapefiles (orig. Gulf Council / SERO) |
 | `data/ports/` | 4 | in the repo | 4 MB | **ships** — FWC ReportCreator + NOAA MRIP tables |
-| `data/dbseabed/` | 2.2 | CSDMS | 9 MB | **auto** — `fn.pull_dbseabed()` |
+| `data/dbseabed/` | 2.2 | CSDMS | 4.4 MB | **ships** (the four `.asc` grids; `data/dbseabed/SOURCE.md`); `fn.pull_dbseabed()` refreshes them |
 | `data/seagrass/GulfwideSAV/` | 2.1 | NOAA NCEI | 100 MB | **auto** — `fn.pull_seagrass()` |
 | `data/seagrass/Seagrass_Statewide/` | 2.1 | FWC open data | 230 MB | **auto** — `fn.pull_seagrass_fwc()` *(optional)* |
 | `data/artificial_reefs/reeflocations.csv` | 2.4 | FWC open data | 1 MB | **auto** — `fn.pull_reeflocations()` *(optional)* |
@@ -273,7 +273,7 @@ data/
 │   ├── dataS2_artificial_reef_structures_REDACTED.csv   by hand
 │   └── reeflocations.csv                                auto (FWC)
 ├── dbseabed/
-│   ├── Gmf_GVL/  Gmf_MUD/  Gmf_RCK/  Gmf_SND/           auto (CSDMS)
+│   ├── Gmf_GVL/  Gmf_MUD/  Gmf_RCK/  Gmf_SND/           ships - 4 asc (CSDMS)
 ├── management_areas/                   ships - 8 zips
 ├── ports/                              ships - 2 CSVs
 ├── regions/                            ships - shapefile, .asc, .csv

@@ -1,7 +1,7 @@
 #' Input data contract for the WFS Ecospace basemaps.
 #'
 #' Most of data/ is gitignored -- roughly 628 MB, and two of the inputs cannot be
-#' redistributed at all. A clone therefore starts with 3 of the 9 inputs present
+#' redistributed at all. A clone therefore starts with 4 of the 9 inputs present
 #' and the rest have to be downloaded or requested. This file is the single place
 #' that records what those inputs are, where they come from, and what shape they
 #' have to be in on disk, so the driver, its error messages and the README cannot
@@ -67,9 +67,9 @@ fn.data_manifest <- function() {
       paste("ReportCreatorResults-County.csv, from a specific 1985-2025 all-species",
             "ReportCreator query, and MRIP WFS gag and red grouper dtrips by county.csv")),
 
-    r("dbseabed", "2.2", "dbseabed", "dir.asc", TRUE, "auto", "fn.pull_dbseabed", "dbseabed",
+    r("dbseabed", "2.2", "dbseabed", "dir.asc", TRUE, "repo", "fn.pull_dbseabed", "dbseabed",
       "https://csdms.colorado.edu/wiki/DBSEABED#Data_for_Modellers",
-      "public",
+      "public; the .asc grids are tracked (data/dbseabed/SOURCE.md), fn.pull_dbseabed() refreshes them",
       "four subdirectories Gmf_GVL/ Gmf_MUD/ Gmf_RCK/ Gmf_SND/, each holding .asc grids"),
 
     r("seagrass_gulfwide", "2.1", "seagrass/GulfwideSAV", "dir.shp", TRUE, "auto",
@@ -357,8 +357,8 @@ fn.check_inputs <- function(dir.data, file.gdb = NULL, stop.on.missing = TRUE,
     cat(strrep("-", 76), "\n", sep = "")
   }
 
-  missing.auto <- man[!man$present & man$how == "auto", ]
-  missing.man  <- man[!man$present & man$how != "auto", ]
+  missing.auto <- man[!man$present & !is.na(man$pull), ]   # has a puller
+  missing.man  <- man[!man$present &  is.na(man$pull), ]
 
   if (verbose && nrow(missing.auto) > 0) {
     cat(sprintf("\n%d input(s) download themselves. Run:  fn.pull_all(dir.data)\n",
@@ -453,7 +453,8 @@ fn.record_provenance <- function(row, dir.data) {
 fn.pull_all <- function(dir.data, overwrite = FALSE) {
 
   man <- fn.data_manifest()
-  man <- man[man$how == "auto", ]
+  man <- man[!is.na(man$pull), ]   # anything with a puller: a tracked input that was
+                                   # deleted, or a dir.data elsewhere, is fetched too
   ok  <- stats::setNames(logical(nrow(man)), man$key)
 
   for (i in seq_len(nrow(man))) {

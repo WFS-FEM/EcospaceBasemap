@@ -57,14 +57,20 @@ output/*min/habitat/*
 #   seagrass/         Seagrass_Statewide.shp alone is 230 MB, over GitHub's
 #                     100 MB per-file hard limit
 #   *.gdb/            275 MB, and FWRI-supplied - check redistribution terms
-#   dbseabed/         downloads itself via fn.pull_dbseabed()
+#   dbseabed/         the four .asc grids ARE tracked (4.4 MB, see
+#                     data/dbseabed/SOURCE.md) because the CSDMS server was
+#                     unreachable in Oct 2026; fn.pull_dbseabed() refreshes them
 #   artificial_reefs/ source is marked REDACTED; check terms before publishing
 data/*
 !data/management_areas/
 !data/ports/
 !data/regions/
+!data/dbseabed/
+data/dbseabed/*/*
+!data/dbseabed/*/*.asc
 
 # The extension rules above still apply inside those folders, so undo them
-# where the region inputs need to survive.
+# where the region and dbSEABED inputs need to survive.
 !data/regions/*.asc
 !data/regions/*.prj
+!data/dbseabed/*/*.asc
