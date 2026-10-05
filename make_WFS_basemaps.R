@@ -80,8 +80,9 @@ excl[depth<=excl.depth] = NA
 ##output ascii----
 file.depth <- file.path(dir.depth,paste0('depth_',res,'min.asc'))
 file.excl <- file.path(dir.depth,paste0('excl_',res,'min.asc'))
-terra::writeRaster(depth,file.depth, overwrite=T)
-terra::writeRaster(excl,file.excl, overwrite=T)
+terra::writeRaster(depth,file.depth, overwrite=T, NAflag=-9999)
+terra::writeRaster(excl,file.excl, overwrite=T, NAflag=-9999)
+unlink(paste0(c(file.depth,file.excl),".aux.xml"))  #GDAL statistics sidecars, not deliverables
 
 ##plots----
 colv    = c('lightblue','blue','darkblue')
