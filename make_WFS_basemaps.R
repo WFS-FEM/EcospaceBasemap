@@ -39,13 +39,15 @@ excl.depth <- 500 #meters
 
 #paths - repo-relative defaults, overridable in config.local.R
 dir.data     <- file.path(getwd(),'data')                     #source data
-dir.basemaps <- file.path(getwd(),'output',paste0(res,'min')) #generated grids
+dir.basemaps <- NULL  #generated grids; NULL = output/<res>min, resolved AFTER config.local.R
+                      #so that overriding res there moves the output folder with it
 file.gdb     <- NULL  #NULL discovers a single .gdb inside dir.data
 
 if(file.exists('config.local.R')){
   source('config.local.R')
   message('Applied local path overrides from config.local.R')
 }
+if(is.null(dir.basemaps)) dir.basemaps <- file.path(getwd(),'output',paste0(res,'min'))
 
 dir.depth <- file.path(dir.basemaps,'depth')
 dir.habitats <- file.path(dir.basemaps,"habitat")
