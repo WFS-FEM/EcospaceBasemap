@@ -44,7 +44,7 @@ fb9370fa52f7807eed115343f99bda42  habitat/seagrass/seagrass_coverage_Seagrass_St
 770edf0b1e8912c4dfe2b5d3a79d8eba  habitat/sum1/habitat_AL_15min.prj
 62e96dc193a597b7dcbf1a8882b73a8b  habitat/sum1/habitat_AM_15min.asc
 770edf0b1e8912c4dfe2b5d3a79d8eba  habitat/sum1/habitat_AM_15min.prj
-2067fbc017f7d251861fd2b972eb0916  habitat/sum1/habitat_basemap_QC_15min.csv
+d35dc38710abf9544b2bf256ac6fd62d  habitat/sum1/habitat_basemap_QC_15min.csv
 ee76f1f08390308d60a69c1d8fd5b916  habitat/sum1/habitat_Gravel_15min.asc
 45cf0f2803bf9a9b036fe049a8e96509  habitat/sum1/habitat_Gravel_15min.prj
 bd33b0f53b6a08e871767064b72ed5c6  habitat/sum1/habitat_Mud_15min.asc
@@ -61,4 +61,4 @@ d057068a3c94e4765768db52e7586c97  habitat/sum1/habitat_NL_15min.asc
 770edf0b1e8912c4dfe2b5d3a79d8eba  habitat/sum1/habitat_seagrass_15min.prj
 9ff72ea446f16ff395c1cd94bdf5796a  habitat/sum1/RCK_raw_15min.asc
 45cf0f2803bf9a9b036fe049a8e96509  habitat/sum1/RCK_raw_15min.prj
-57f25db0d2dfae71b721d167f89d1a52  habitat/sum1/rock_relief_shares_15min.csv
+18b748042dba6b8fd449fd15af4860a1  habitat/sum1/rock_relief_shares_15min.csv

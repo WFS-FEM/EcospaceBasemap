@@ -516,7 +516,7 @@ fn.write_checksums <- function(dir.basemaps, subdirs = c("depth", "habitat"),
   base  <- paste0(normalizePath(dir.basemaps, "/"), "/")
   rel   <- substring(normalizePath(files, "/"), nchar(base) + 1)
   ord   <- order(rel)
-  out   <- data.frame(md5 = unname(tools::md5sum(files))[ord], path = rel[ord],
+  out   <- data.frame(md5 = fn.md5_lf(files)[ord], path = rel[ord],
                       stringsAsFactors = FALSE)
   con <- file(file.path(dir.basemaps, file), open = "wb")
   on.exit(close(con))
@@ -537,10 +537,33 @@ fn.verify_checksums <- function(dir.basemaps, file = "CHECKSUMS.md5") {
   lines <- readLines(file.path(dir.basemaps, file))
   md5   <- substr(lines, 1, 32)
   path  <- substring(lines, 35)
-  now   <- unname(tools::md5sum(file.path(dir.basemaps, path)))
+  now   <- fn.md5_lf(file.path(dir.basemaps, path))
   bad   <- data.frame(path = path, expected = md5, found = now,
                       stringsAsFactors = FALSE)[is.na(now) | now != md5, ]
   message(sprintf("%-24s %d of %d files match %s", "checksums",
                   length(path) - nrow(bad), length(path), file))
   invisible(bad)
+}
+
+
+#' MD5 of a file's LF form.
+#'
+#' The repository stores the grids and tables with LF (.gitattributes), but R's
+#' write.csv() writes CRLF on Windows, so a table on the machine that produced
+#' it hashes differently from the same table after a checkout. Hashing with
+#' every CR stripped gives one answer on both, equal to what `md5sum` reports
+#' on a checkout (and to git's stored content). Files with no CR are unchanged.
+#'
+#' @param files Paths.
+#' @return Unnamed character vector of MD5s; NA where a file is missing.
+fn.md5_lf <- function(files) {
+  vapply(files, function(f) {
+    if (!file.exists(f)) return(NA_character_)
+    x <- readBin(f, "raw", file.size(f))
+    x <- x[x != as.raw(0x0d)]
+    tmp <- tempfile()
+    on.exit(unlink(tmp))
+    writeBin(x, tmp)
+    unname(tools::md5sum(tmp))
+  }, character(1), USE.NAMES = FALSE)
 }
