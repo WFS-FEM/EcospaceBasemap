@@ -1,0 +1,9 @@
+# Grids, their projection sidecars, tables and the checksum manifest are stored
+# and checked out with LF on every platform, so the MD5 of a file on disk equals
+# the MD5 in output/<res>min/CHECKSUMS.md5 whichever machine cloned the repo.
+# Without this, a Windows checkout with core.autocrlf=true converts them to CRLF
+# and every checksum changes. terra writes LF already, so nothing is renormalised.
+*.asc text eol=lf
+*.prj text eol=lf
+*.csv text eol=lf
+*.md5 text eol=lf
