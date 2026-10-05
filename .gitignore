@@ -9,14 +9,37 @@ config.local.R
 .Rproj.user/
 Rplots.pdf
 
-# Generated basemaps live on a local drive outside the repo (cfg$out_root in
-# make_WFS_basemaps.R). Nothing generated should be committed here.
-output/
+# Generated grids. The driver writes them to output/<res>min/ (dir.basemaps in
+# make_WFS_basemaps.R). The small Ecospace deliverables -- the depth grid and
+# every habitat layer, as .asc/.prj/.csv plus a CHECKSUMS.md5 per resolution --
+# are TRACKED so a regeneration shows in git diff and a downstream repo (GFISHER)
+# can verify its copies. Figures, PDFs, GDAL sidecars and sections 3-5
+# (management areas, ports, regions) stay ignored.
+# git cannot re-include a file under an excluded directory, so the directories
+# are opened one level at a time and only the wanted extensions negated.
+output/*
+!output/*min/
+output/*min/*
+!output/*min/CHECKSUMS.md5
+!output/*min/depth/
+!output/*min/habitat/
+output/*min/habitat/*
+!output/*min/habitat/sum1/
+!output/*min/habitat/seagrass/
+!output/*min/habitat/dbseabed/
+!output/*min/habitat/gfisher/
+!output/*min/habitat/artificial_reefs/
 *.asc
 *.prj
 *.aux.xml
 *.log
 *.png
+*.pdf
+!output/*min/depth/*.asc
+!output/*min/depth/*.prj
+!output/*min/habitat/*/*.asc
+!output/*min/habitat/*/*.prj
+!output/*min/habitat/*/*.csv
 
 # ...except the README figures, which are checked in deliberately.
 !docs/img/*.png
