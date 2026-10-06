@@ -1,7 +1,7 @@
 #' Input data contract for the WFS Ecospace basemaps.
 #'
 #' Most of data/ is gitignored -- roughly 628 MB, and two of the inputs cannot be
-#' redistributed at all. A clone therefore starts with 3 of the 9 inputs present
+#' redistributed at all. A clone therefore starts with 4 of the 9 inputs present
 #' and the rest have to be downloaded or requested. This file is the single place
 #' that records what those inputs are, where they come from, and what shape they
 #' have to be in on disk, so the driver, its error messages and the README cannot
@@ -67,9 +67,9 @@ fn.data_manifest <- function() {
       paste("ReportCreatorResults-County.csv, from a specific 1985-2025 all-species",
             "ReportCreator query, and MRIP WFS gag and red grouper dtrips by county.csv")),
 
-    r("dbseabed", "2.2", "dbseabed", "dir.asc", TRUE, "auto", "fn.pull_dbseabed", "dbseabed",
+    r("dbseabed", "2.2", "dbseabed", "dir.asc", TRUE, "repo", "fn.pull_dbseabed", "dbseabed",
       "https://csdms.colorado.edu/wiki/DBSEABED#Data_for_Modellers",
-      "public",
+      "public; the .asc grids are tracked (data/dbseabed/SOURCE.md), fn.pull_dbseabed() refreshes them",
       "four subdirectories Gmf_GVL/ Gmf_MUD/ Gmf_RCK/ Gmf_SND/, each holding .asc grids"),
 
     r("seagrass_gulfwide", "2.1", "seagrass/GulfwideSAV", "dir.shp", TRUE, "auto",
@@ -357,8 +357,8 @@ fn.check_inputs <- function(dir.data, file.gdb = NULL, stop.on.missing = TRUE,
     cat(strrep("-", 76), "\n", sep = "")
   }
 
-  missing.auto <- man[!man$present & man$how == "auto", ]
-  missing.man  <- man[!man$present & man$how != "auto", ]
+  missing.auto <- man[!man$present & !is.na(man$pull), ]   # has a puller
+  missing.man  <- man[!man$present &  is.na(man$pull), ]
 
   if (verbose && nrow(missing.auto) > 0) {
     cat(sprintf("\n%d input(s) download themselves. Run:  fn.pull_all(dir.data)\n",
@@ -453,7 +453,8 @@ fn.record_provenance <- function(row, dir.data) {
 fn.pull_all <- function(dir.data, overwrite = FALSE) {
 
   man <- fn.data_manifest()
-  man <- man[man$how == "auto", ]
+  man <- man[!is.na(man$pull), ]   # anything with a puller: a tracked input that was
+                                   # deleted, or a dir.data elsewhere, is fetched too
   ok  <- stats::setNames(logical(nrow(man)), man$key)
 
   for (i in seq_len(nrow(man))) {
@@ -488,4 +489,81 @@ fn.pull_all <- function(dir.data, overwrite = FALSE) {
   }
 
   invisible(ok)
+}
+
+
+#' Write an md5sum-style checksum manifest for a resolution's deliverables.
+#'
+#' Lists every tracked grid under `dir.basemaps` (the depth/ and habitat/
+#' subfolders, .asc/.prj/.csv) with its MD5, one per line in the format
+#' `md5sum -c` reads: `<md5>  <path>` with the path relative to `dir.basemaps`,
+#' forward slashes, LF line endings, sorted by path, so the file is identical
+#' whichever platform wrote it. A downstream repo that ships copies of these
+#' grids (GFISHER does) compares against this file rather than against a clone.
+#'
+#' @param dir.basemaps `output/<res>min`, the folder the driver writes into.
+#' @param subdirs Subfolders to include.
+#' @param pattern Regular expression selecting the files.
+#' @param file Output name, inside `dir.basemaps`.
+#' @return The manifest as a data.frame (md5, path), invisibly.
+fn.write_checksums <- function(dir.basemaps, subdirs = c("depth", "habitat"),
+                               pattern = "\\.(asc|prj|csv)$",
+                               file = "CHECKSUMS.md5") {
+  dirs  <- file.path(dir.basemaps, subdirs)
+  dirs  <- dirs[dir.exists(dirs)]
+  files <- unlist(lapply(dirs, list.files, pattern = pattern,
+                         recursive = TRUE, full.names = TRUE))
+  base  <- paste0(normalizePath(dir.basemaps, "/"), "/")
+  rel   <- substring(normalizePath(files, "/"), nchar(base) + 1)
+  ord   <- order(rel)
+  out   <- data.frame(md5 = fn.md5_lf(files)[ord], path = rel[ord],
+                      stringsAsFactors = FALSE)
+  con <- file(file.path(dir.basemaps, file), open = "wb")
+  on.exit(close(con))
+  writeLines(sprintf("%s  %s", out$md5, out$path), con, sep = "\n")
+  message(sprintf("%-24s %d files -> %s", "checksums", nrow(out),
+                  file.path(dir.basemaps, file)))
+  invisible(out)
+}
+
+
+#' Compare a folder's grids against its checksum manifest.
+#'
+#' @param dir.basemaps Folder holding `CHECKSUMS.md5` (see fn.write_checksums).
+#' @param file Manifest name.
+#' @return data.frame of the rows that differ or are missing (zero rows when
+#'   everything matches), invisibly; prints a one-line summary.
+fn.verify_checksums <- function(dir.basemaps, file = "CHECKSUMS.md5") {
+  lines <- readLines(file.path(dir.basemaps, file))
+  md5   <- substr(lines, 1, 32)
+  path  <- substring(lines, 35)
+  now   <- fn.md5_lf(file.path(dir.basemaps, path))
+  bad   <- data.frame(path = path, expected = md5, found = now,
+                      stringsAsFactors = FALSE)[is.na(now) | now != md5, ]
+  message(sprintf("%-24s %d of %d files match %s", "checksums",
+                  length(path) - nrow(bad), length(path), file))
+  invisible(bad)
+}
+
+
+#' MD5 of a file's LF form.
+#'
+#' The repository stores the grids and tables with LF (.gitattributes), but R's
+#' write.csv() writes CRLF on Windows, so a table on the machine that produced
+#' it hashes differently from the same table after a checkout. Hashing with
+#' every CR stripped gives one answer on both, equal to what `md5sum` reports
+#' on a checkout (and to git's stored content). Files with no CR are unchanged.
+#'
+#' @param files Paths.
+#' @return Unnamed character vector of MD5s; NA where a file is missing.
+fn.md5_lf <- function(files) {
+  vapply(files, function(f) {
+    if (!file.exists(f)) return(NA_character_)
+    x <- readBin(f, "raw", file.size(f))
+    x <- x[x != as.raw(0x0d)]
+    tmp <- tempfile()
+    on.exit(unlink(tmp))
+    writeBin(x, tmp)
+    unname(tools::md5sum(tmp))
+  }, character(1), USE.NAMES = FALSE)
 }

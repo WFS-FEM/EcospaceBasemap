@@ -20,6 +20,7 @@ to red tides, stock assessment, and catch advice for Gulf of Mexico reef fish*
 
 - [Quick start](#quick-start)
 - [For collaborators](#for-collaborators)
+  - [Downstream repositories](#downstream-repositories)
 - [How it is organised](#how-it-is-organised)
 - [Requirements](#requirements)
 - [Getting the data](#getting-the-data)
@@ -131,20 +132,49 @@ otherwise account for.
 
 ### Contributing changes
 
+Open an issue first, then create the branch from its Development sidebar so the
+branch is named `<issue number>-short-description` and linked to the issue:
+
 ```bash
-git checkout -b short-description-of-change   # never commit straight to main
-# ... work, commit ...
-git push -u origin short-description-of-change
+git fetch
+git checkout 2-short-description      # never commit straight to main
+# ... work, commit with "(issue #2)" at the end of each subject ...
+git push -u origin 2-short-description
 ```
 
-Then open a pull request on GitHub, base `main`, and request a review. Answer
+Then open a pull request on GitHub, base `main`, with `Fixes #<issue>` in the body,
+and request a review. Answer
 review comments by pushing more commits to the same branch — the PR updates
 itself. Pushing a branch changes nothing for anyone else; `main` only moves when
 someone merges.
 
-Before you push, check that `git status` is clean and that your commits touch no
-`data/` or `output/` paths. Both are gitignored, but the geodatabase is 274 MB and
-that is the one mistake that is genuinely painful to undo.
+Before you push, check that `git status` is clean and that your commits add nothing
+under `data/` beyond the folders that ship (management areas, ports, regions, dbSEABED)
+or under `output/` beyond the tracked grids (see [Output tree](#output-tree)). The
+geodatabase is 274 MB and that is the one mistake that is genuinely painful to undo.
+Commit regenerated grids separately from code, with the run that produced them
+described in the message.
+
+### Downstream repositories
+
+This repository is the single producer of the WFS Ecospace basemaps. Other WFS-FEM
+repositories consume its outputs rather than rebuild them, and the contract is the
+tracked grids plus `output/<res>min/CHECKSUMS.md5`:
+
+- **`WFS-FEM/GFISHER`** (video survey, MaxN maps, habitat affinities) ships byte-identical
+  copies of `habitat/seagrass/seagrass_coverage_Seagrass_Statewide_<res>min.asc` (as
+  `data/seagrass/seagrass_<res>min.asc`) and of the raw dbSEABED grids, each with a
+  `SOURCE.md` naming this repository, the commit and the MD5; its `config.local.R` can
+  instead point `dir.ecospace.basemap` at a clone of this repository. It keeps its own
+  copy of the depth grid as the template for assigning survey stations to cells, because
+  GDAL writes the ASCII header cell size with 12 decimals (`0.083333333333`) and seven
+  stations sit exactly on 5-minute row boundaries; the values are identical
+  (max difference 5e-12). Whether GFISHER should also consume the `sum1/` layers is open
+  (WFS-FEM/GFISHER#3): GFISHER currently builds a different nine-layer sum-to-1 product
+  for its affinity analysis, see the [verification table](#verification-against-the-legacy-scripts).
+
+If you regenerate the grids, the downstream copies are stale until their `SOURCE.md`
+MD5s are updated against the new `CHECKSUMS.md5`.
 
 ---
 
@@ -214,7 +244,7 @@ It is never attached.
 Most of `data/` is **gitignored** — roughly 628 MB, dominated by the GFISHER
 geodatabase and the seagrass shapefiles. `Seagrass_Statewide.shp` alone is
 230 MB, over GitHub's 100 MB per-file hard limit. A clone therefore starts with
-**3 of the 9 inputs present**.
+**4 of the 9 inputs present**.
 
 Run the driver, or just these two lines, and it will tell you where you stand:
 
@@ -228,7 +258,7 @@ fn.check_inputs(dir.data) # prints the table below against your actual disk
 | `data/regions/` | 5 | in the repo | 7 MB | **ships** — `age0_survey_regions.shp` (+ sidecars), `age0_survey_regions_5min_mod.asc`, `env3LABS_93to24.csv` |
 | `data/management_areas/` | 3 | in the repo | 1 MB | **ships** — 8 zipped shapefiles (orig. Gulf Council / SERO) |
 | `data/ports/` | 4 | in the repo | 4 MB | **ships** — FWC ReportCreator + NOAA MRIP tables |
-| `data/dbseabed/` | 2.2 | CSDMS | 9 MB | **auto** — `fn.pull_dbseabed()` |
+| `data/dbseabed/` | 2.2 | CSDMS | 4.4 MB | **ships** (the four `.asc` grids; `data/dbseabed/SOURCE.md`); `fn.pull_dbseabed()` refreshes them |
 | `data/seagrass/GulfwideSAV/` | 2.1 | NOAA NCEI | 100 MB | **auto** — `fn.pull_seagrass()` |
 | `data/seagrass/Seagrass_Statewide/` | 2.1 | FWC open data | 230 MB | **auto** — `fn.pull_seagrass_fwc()` *(optional)* |
 | `data/artificial_reefs/reeflocations.csv` | 2.4 | FWC open data | 1 MB | **auto** — `fn.pull_reeflocations()` *(optional)* |
@@ -273,7 +303,7 @@ data/
 │   ├── dataS2_artificial_reef_structures_REDACTED.csv   by hand
 │   └── reeflocations.csv                                auto (FWC)
 ├── dbseabed/
-│   ├── Gmf_GVL/  Gmf_MUD/  Gmf_RCK/  Gmf_SND/           auto (CSDMS)
+│   ├── Gmf_GVL/  Gmf_MUD/  Gmf_RCK/  Gmf_SND/           ships - 4 asc (CSDMS)
 ├── management_areas/                   ships - 8 zips
 ├── ports/                              ships - 2 CSVs
 ├── regions/                            ships - shapefile, .asc, .csv
@@ -685,21 +715,37 @@ changes which cells fall on region edges.
 
 ## Output tree
 
-Everything lands under `dir.basemaps`, outside the repository:
+Everything lands under `dir.basemaps`, which defaults to `output/<res>min/` inside the
+repository (set it in `config.local.R` to write elsewhere, for example straight into an
+Ecospace model folder). The depth grids and every habitat layer are **tracked**, as
+`.asc`, `.prj` and `.csv` only, so a regeneration shows up in `git diff`; figures, PDFs,
+GDAL `.aux.xml` sidecars and sections 3-5 are not. `CHECKSUMS.md5` lists the MD5 of every
+tracked grid in `md5sum` format and is rewritten at the end of section 2.5, so
+`md5sum -c CHECKSUMS.md5` (Git Bash) or `fn.verify_checksums(dir.basemaps)` (R) checks a
+checkout or a copy against what the driver wrote.
 
 ```
-basemaps/5min/
-├── depth/                     2 asc   1 png
+output/5min/                                              tracked
+├── CHECKSUMS.md5              64 entries                   yes
+├── depth/                     2 asc   1 png                yes (asc, prj)
 ├── habitat/
-│   ├── seagrass/              4 asc   3 png
-│   ├── dbseabed/              4 asc
-│   ├── gfisher/               7 asc   3 png
-│   ├── artificial_reefs/      4 asc   1 png
-│   └── sum1/                 11 asc   1 png   2 csv     <- the Ecospace input
-├── management_areas/          9 asc   1 png
-├── ports/                    11 asc  12 png  12 csv
-└── regions/                  12 asc   1 png   1 csv
+│   ├── seagrass/              3 asc   3 png                yes
+│   ├── dbseabed/              4 asc   1 png   1 pdf        yes
+│   ├── gfisher/               7 asc   2 png                yes
+│   ├── artificial_reefs/      4 asc   1 png                yes
+│   └── sum1/                 11 asc   1 png   2 csv        yes   <- the Ecospace input
+├── management_areas/          9 asc   1 png                no
+├── ports/                    11 asc  12 png  12 csv        no
+└── regions/                  12 asc   1 png   1 csv        no
+output/15min/                 the same depth/ and habitat/ set at 15 min (sections 1-2.5)
 ```
+
+The 15-minute tree exists because the downstream GFISHER repository carries a 15-minute
+grid. Sections 3 and 4 also run at 15 min but are untested there and stay untracked;
+section 5 stops, because the regions combine reads the hand-edited 5-minute age-0 grid.
+At 15 min no depth x latitude stratum reaches the 20 surveyed cells `fn.rock_relief_split()`
+asks for, so the rock relief shares come from the depth-bin and global fallbacks
+(`rock_relief_shares_15min.csv` says which).
 
 ---
 
@@ -763,7 +809,7 @@ scripts produced.
 | Management areas | 0 value mismatches, 0 NA mismatches, all 9 layers |
 | Ports | 0 value mismatches, 0 NA mismatches, all 11 layers |
 | Regions | 0 value mismatches, 0 NA mismatches; every cell count and geodesic area matches |
-| GFISHER, sum-to-1 | not directly comparable — new 2026 geodatabase, and the sum-to-1 product was restructured (rock dissolved, sediment split three ways) |
+| GFISHER, sum-to-1 | not directly comparable — new 2026 geodatabase, and the sum-to-1 product was restructured (rock dissolved, sediment split three ways). The GFISHER repository holds a *different* sum-to-1 product by the same author (its stage 1: rock kept as its own layer, stratum shrinkage instead of IDW, FWC-only seagrass, reef zeroed below 300 m); the two are compared in GFISHER `docs/issue3-remove-redundant-basemap-code-plan.md`, and which one feeds Ecospace is an open question for the author (WFS-FEM/GFISHER#3) |
 
 Remaining differences are storage type only: binary and categorical layers are
 written `INT2S` where the legacy wrote float.

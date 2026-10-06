@@ -39,13 +39,15 @@ excl.depth <- 500 #meters
 
 #paths - repo-relative defaults, overridable in config.local.R
 dir.data     <- file.path(getwd(),'data')                     #source data
-dir.basemaps <- file.path(getwd(),'output',paste0(res,'min')) #generated grids
+dir.basemaps <- NULL  #generated grids; NULL = output/<res>min, resolved AFTER config.local.R
+                      #so that overriding res there moves the output folder with it
 file.gdb     <- NULL  #NULL discovers a single .gdb inside dir.data
 
 if(file.exists('config.local.R')){
   source('config.local.R')
   message('Applied local path overrides from config.local.R')
 }
+if(is.null(dir.basemaps)) dir.basemaps <- file.path(getwd(),'output',paste0(res,'min'))
 
 dir.depth <- file.path(dir.basemaps,'depth')
 dir.habitats <- file.path(dir.basemaps,"habitat")
@@ -53,7 +55,7 @@ invisible(lapply(c(dir.basemaps,dir.depth,dir.habitats),dir.create,
                  recursive=TRUE,showWarnings=FALSE))
 
 #INPUT DATA---------------------
-#Most of data/ is gitignored, so a clone starts with 3 of the 9 inputs present.
+#Most of data/ is gitignored, so a clone starts with 4 of the 9 inputs present.
 #fn.pull_all() fetches everything that downloads itself and skips what is already
 #there; fn.check_inputs() then reports what is present, stops if a REQUIRED input
 #is missing, and prints where to obtain it. R/data_setup_functions.R holds the
@@ -80,8 +82,9 @@ excl[depth<=excl.depth] = NA
 ##output ascii----
 file.depth <- file.path(dir.depth,paste0('depth_',res,'min.asc'))
 file.excl <- file.path(dir.depth,paste0('excl_',res,'min.asc'))
-terra::writeRaster(depth,file.depth, overwrite=T)
-terra::writeRaster(excl,file.excl, overwrite=T)
+terra::writeRaster(depth,file.depth, overwrite=T, NAflag=-9999)
+terra::writeRaster(excl,file.excl, overwrite=T, NAflag=-9999)
+unlink(paste0(c(file.depth,file.excl),".aux.xml"))  #GDAL statistics sidecars, not deliverables
 
 ##plots----
 colv    = c('lightblue','blue','darkblue')
@@ -228,6 +231,11 @@ basemap <- fn.combine_habitats_sum1(depth     = depth,
 
 ###plots----
 fn.plot_habitat_basemap(basemap, dir.maps = dir.sum1)
+
+###checksums----
+#One md5sum-style manifest per resolution, covering every tracked grid under
+#depth/ and habitat/. GFISHER verifies its shipped copies against this file.
+fn.write_checksums(dir.basemaps)
 
 
 #3. management areas------------

@@ -287,7 +287,7 @@ fn.rasterize_dbseabed <- function(dir.dbseabed, depth, resample.method='near', d
     title(main=paste("dbSEABED:",strsplit(basename(file.asc.i),"_")[[1]][2]), outer=T)
   }
   dev.off()
-  terra::writeRaster(seabed.stack,filename=paste0(dir.out,"/",names(seabed.stack),"_",res,"min.asc"))
+  terra::writeRaster(seabed.stack,filename=paste0(dir.out,"/",names(seabed.stack),"_",res,"min.asc"), overwrite=TRUE)
 return(seabed.stack)
 } #eof
 
