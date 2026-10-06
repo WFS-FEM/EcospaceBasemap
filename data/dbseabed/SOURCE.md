@@ -6,12 +6,12 @@ cells, lower-left corner -98.19, 23.36. The header says `NODATA_value -9999` but
 cells are coded `-99`; `fn.rasterize_dbseabed()` treats them as NA. Only the `.asc` grids are
 tracked; the zips' auxiliary `.jpg`/`.avl`/`.url` files stay ignored.
 
-| Folder | File | Variable | MD5 |
+| Folder | File | Variable | MD5 (LF form, as stored and checked out) |
 |---|---|---|---|
-| `Gmf_RCK/` | `gmf_RCK_val.asc` | percent rock outcrop (an areal fraction, separate from the grain-size triangle) | `46c0bd2217e74c35f96d199f84acff0b` |
-| `Gmf_GVL/` | `gmf_GVL_val.asc` | percent gravel | `5ce2c0b6ccea78c9eeb186720dabb434` |
-| `Gmf_SND/` | `gmf_SND_val.asc` | percent sand | `bf01968f6c531a92de2acdf0026da3b3` |
-| `Gmf_MUD/` | `gmf_MUD_val.asc` | percent mud | `a173130e1604583fa4a99dedac6c0c36` |
+| `Gmf_RCK/` | `gmf_RCK_val.asc` | percent rock outcrop (an areal fraction, separate from the grain-size triangle) | `e1332f6d7983bcae79a5e2b134021d21` |
+| `Gmf_GVL/` | `gmf_GVL_val.asc` | percent gravel | `1242a3351fc554895c5a5c413d8cf5d8` |
+| `Gmf_SND/` | `gmf_SND_val.asc` | percent sand | `8147b22640263554185940f712f74cf7` |
+| `Gmf_MUD/` | `gmf_MUD_val.asc` | percent mud | `16e40884cbdc192cbdb03c3012d50adb` |
 
 Source: https://csdms.colorado.edu/wiki/DBSEABED#Data_for_Modellers (zips
 `https://csdms.colorado.edu/csdms_wiki/images/Gmf_<CLS>.zip`). Jenkins, C. (dbSEABED,
